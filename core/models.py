@@ -1,0 +1,100 @@
+from sqlalchemy import Column, String, Integer, DateTime, func, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declared_attr
+from sqlalchemy.dialects.postgresql import JSON
+from core.database import Base
+import uuid
+
+class Autoid():
+    @declared_attr
+    def id (cls):
+        return Column(
+            String,
+            primary_key= True,
+            default = lambda:str(uuid.uuid4()),
+            index = True,
+            unique = True,
+            nullable = False
+        )
+
+
+class Users(Base, Autoid):
+    __tablename__ = "users"
+    username = Column(String, nullable = False)
+    email = Column(String, nullable = False, unique = True)
+    password = Column(String , nullable = False)
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default = func.now())
+    clinics = relationship("RegisteredClinics", back_populates= "owner", cascade="all, delete")
+    dsos = relationship("Dso", back_populates= "user", cascade= "all, delete")
+
+
+class Dso(Base, Autoid):
+    __tablename__ = "Dsos"
+    name = Column(String, nullable= False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable = False )
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
+    clinics = relationship("RegisteredClinics", back_populates= "dso", cascade="all, delete")
+    user = relationship("Users", back_populates= "dsos")
+
+
+
+
+class RegisteredClinics (Base, Autoid):
+    __tablename__ = "registered_clinics"
+    crm_type = Column(String, nullable = False)
+    clinic_name = Column(String, nullable = False)
+    clinic_number = Column(Integer, nullable = False )
+    clinic_timezone = Column(String, nullable = False)
+    od_developer_key = Column(String, nullable = False)
+    od_customer_key = Column(String, nullable = False)
+    crm_api_key = Column(String, nullable = False)
+    operatory_calendar_map = Column(JSON, nullable=True)
+    owner_id = Column(String, ForeignKey("users.id", ondelete= "CASCADE"), nullable = False )
+    dso_id = Column(String, ForeignKey("Dsos.id", ondelete="CASCADE"), nullable = True)
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
+    dso = relationship("Dso", back_populates= "clinics")
+    owner = relationship("Users", back_populates = "clinics")
+    patients = relationship("Patients", back_populates= "clinic", cascade="all, delete")
+    appointments = relationship("Appointments", back_populates= "clinic", cascade="all, delete")
+
+
+class Patients(Base, Autoid):
+    __tablename__ = "patients"
+    FName = Column(String, nullable = True )
+    LName = Column(String, nullable = True)
+    Gender = Column(String, nullable = False )
+    phone = Column(String, nullable = False )
+    email = Column(String, nullable = True )
+    pat_num = Column(Integer, nullable = False )
+    contact_id = Column(String, nullable= False)
+    clinic_id = Column(String, ForeignKey("registered_clinics.id", ondelete="CASCADE"), nullable = False)
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
+    clinic = relationship("RegisteredClinics", back_populates = "patients")
+    appointments = relationship("Appointments", back_populates="patient", cascade="all, delete")
+
+    __table_args__ = (
+        UniqueConstraint ("clinic_id", "pat_num"  , name = "uq_clinic_patnum" ),
+        UniqueConstraint ("clinic_id", "contact_id" , name = "uq_clinic_contactid" ) 
+                     )
+
+
+
+class Appointments(Base, Autoid):
+    __tablename__ = "appointments"
+    AptNum = Column(Integer, nullable = False)
+    event_id = Column(String, nullable = False )
+    status = Column(String, nullable  = False)
+    start_time = Column(DateTime(timezone= True), nullable = False )
+    end_time = Column(String, nullable = False)
+    date = Column(String , nullable = False)
+    calendar_id = Column(String, nullable = False )
+    clinic_id = Column(String, ForeignKey("registered_clinics.id", ondelete="CASCADE"), nullable = False )
+    pat_id = Column (String, ForeignKey("patients.id", ondelete="CASCADE"), nullable = False )
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
+    clinic = relationship("RegisteredClinics", back_populates= "appointments")
+    patient = relationship("Patients", back_populates= "appointments")
+    
+    __table_args__ = (
+        UniqueConstraint("clinic_id", "AptNum" , name=  "uq_clinic_AptNum"),
+        UniqueConstraint("clinic_id", "event_id" , name = "uq_clinic_eventid" )
+                     )
