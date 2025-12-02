@@ -58,7 +58,7 @@ class openDentalApi:
    
         except Exception as e :
             self.cb.on_failure()
-            raise 
+            raise
     
                  
     

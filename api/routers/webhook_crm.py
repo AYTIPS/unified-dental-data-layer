@@ -1,6 +1,7 @@
 from fastapi import  APIRouter, Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from core.queue import redis_client
+from rq import Retry
 from core.database import get_db
 from core.queue import appointments_queue
 from core.models import RegisteredClinics
@@ -22,7 +23,7 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail = "clinic not found wwrong webhook url ")
 
     # checks if the crm supported is the one returned 
-    if not clinic.crm_type.lower() != crm_type.lower():
+    if  clinic.crm_type.lower() != crm_type.lower():
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail= "incorrect webhook url")
     #extract payload for redis use 
     payload_dict = payload.model_dump()
@@ -36,9 +37,14 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
     else:
         redis_client.setex(redis_key, 300, "processing")
 
+    retry_cfg = Retry(
+        max=3,                  # total attempts: 1 original + 2 more OR 3 total (depends on RQ version, but idea is "few times")
+        interval=[60, 120, 300] # retry after 60s, then 120s, then 300s
+    )
+
 
     #queue the job 
-    job = appointments_queue.enqueue(process_crm_load, payload.model_dump(), crm_type = crm_type, clinic_id = clinic_id)
+    job = appointments_queue.enqueue(process_crm_load, payload.model_dump(), crm_type = crm_type, clinic_id = clinic_id, retry =  retry_cfg)
 
     return {"status" : status.HTTP_200_OK ,
             "payload": payload,

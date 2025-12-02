@@ -46,13 +46,13 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
 
         if existing_patient:
             pat_num = existing_patient.pat_num
-
-        if not existing_patient:
-            check = await od.search_patients(last_name = patient_data.LName , date_of_birth = patient_data.Birthdate)
-            pat_num = check[0]["PatNum"] if not check else None
         else:
-            created = await od.create_patients (patient_data = patient_data)
-            pat_num = created["PatNum"]
+            check = await od.search_patients(last_name=patient_data.LName, date_of_birth=patient_data.Birthdate)
+            if check:
+                pat_num = check[0]["PatNum"]
+            else:
+                created = await od.create_patients(patient_data=patient_data)
+                pat_num = created["PatNum"]
         
 
         new_patient = Patients( 
@@ -92,13 +92,17 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
         return pat_num, created_appointment
     
     except circuit_breaker_open_error:
-         appointments_queue.enqueue(process_crm_load, clinic_id = clinic_id , crm_type = crm_type, payload = payload )
-         return
+         logger.warning(" Too many Failures Circuit breaker is still open", clinic_id,  crm_type,
+            payload.get("event_id"),
+            payload.get("contact_id"))
+         raise
         
 
     except Exception as e :
             db.rollback()
-            raise ValueError(f"Error processing patient : {e}")
+            logger.exception(f"Error processing patient : {e}", clinic_id,  crm_type,
+            payload.get("event_id"),
+            payload.get("contact_id"))
             
         
     finally:
