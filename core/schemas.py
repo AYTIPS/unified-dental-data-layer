@@ -1,7 +1,11 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, StringConstraints
 from datetime import datetime
 from typing import Optional
-from typing import Literal
+from typing import Literal, Annotated
+
+
+Datestr = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+
 
 
 class Webhook_requests(BaseModel):
@@ -21,7 +25,7 @@ class Webhook_requests(BaseModel):
     calendar_id : str 
     Note : str 
     WirelessPhone:str 
-    Email: str 
+    Email: EmailStr 
     PriProv:str
 
 
@@ -34,7 +38,7 @@ class patient_model(BaseModel):
     Address: str 
     Birthdate: str 
     WirelessPhone:str 
-    Email: Optional[str] 
+    Email: Optional[EmailStr] 
     position : Optional[str]
 
 
@@ -62,3 +66,48 @@ class create_pop_ups(BaseModel):
     PatNum :str 
 
 
+
+###########################################  GHL  WORKKS 
+
+class create_contact_ghl(BaseModel):
+    firstName: str 
+    lastName:str
+    email: EmailStr
+    phone:str 
+    dateOfBirth: Datestr
+
+class create_appointment_ghl(BaseModel):
+    calendarId: str 
+    locationId: str 
+    contactId : str 
+    startTime : str 
+    endTime : str 
+    ignoreFreeSlotValidation : Literal[True]
+    assignedUserId : str 
+    appointmentStatus : str 
+    
+
+class update_appointment_ghl(BaseModel):
+    calendarId: str 
+    locationId: str  
+    startTime : str 
+    endTime : str 
+    ignoreFreeSlotValidation : Literal[True]
+    assignedUserId : str 
+    appointmentStatus : str 
+
+
+
+
+
+################Authentication Schema 
+class loginresponse(BaseModel):
+    access_token : str 
+    refresh_token : str 
+
+class loginrequest(BaseModel):
+    email : EmailStr
+    password: str
+
+class logoutresponse(BaseModel):
+    message : str 

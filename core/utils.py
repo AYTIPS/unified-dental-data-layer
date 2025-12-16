@@ -1,4 +1,4 @@
-from core.schemas import patient_model, Appointments_create, Appointments_update, create_commslogs,  create_pop_ups
+from core.schemas import patient_model, Appointments_create, Appointments_update, create_commslogs,  create_pop_ups, create_contact_ghl, create_appointment_ghl, update_appointment_ghl
 from core.database import SessionLocal
 from dateutil import parser
 from core.models import Appointments
@@ -7,6 +7,7 @@ import logging
 import asyncio
 import httpx
 from datetime import datetime, timedelta
+
  
 fmt = "%Y-%m-%d %H:%M:%S "
 logger = logging.getLogger(__name__)
@@ -176,5 +177,52 @@ async def book_appointment (od, clinic, date_str, start_str, end_str ,status, ca
                 
             else:
                 print(" No free operatory found for that time slot.")
-                
-            
+
+
+
+
+
+
+
+
+
+
+                ##############################GHL NORMALIZATION##############################
+def create_contacts(data: create_contact_ghl):
+    return{
+        "firstName" : data.firstName,
+        "lastName" : data.lastName,
+        "Email" : data.email,
+        "phone" : data.phone,
+        "dateofBirth" : data.dateOfBirth
+        }
+
+
+def create_appointments (appt_data :  create_appointment_ghl):
+    return {
+        "calendarId" : appt_data.calendarId,
+        "locationId" : appt_data.locationId,
+        "contactId" : appt_data.contactId, 
+        "startTime":  appt_data.startTime,
+        "endTime":    appt_data.endTime,
+        "ignoreFreeSlotValidation": appt_data.ignoreFreeSlotValidation, 
+        "asignedUserId" : appt_data.assignedUserId,
+        "appointmentStatus" : appt_data.appointmentStatus 
+    }
+
+def update_appointments (appt_data : update_appointment_ghl):
+    return {
+        "calendarId" : appt_data.calendarId,
+        "locationId" : appt_data.locationId,
+        "startTime":  appt_data.startTime,
+        "endTime":    appt_data.endTime,
+        "ignoreFreeSlotValidation": appt_data.ignoreFreeSlotValidation, 
+        "asignedUserId" : appt_data.assignedUserId,
+        "appointmentStatus" : appt_data.appointmentStatus 
+    }
+
+
+
+
+
+

@@ -2,11 +2,10 @@ from core.database import SessionLocal
 from core.models import Patients, RegisteredClinics, Appointments
 from api.routers import webhook_crm
 from sdk.opendental_sdk import openDentalApi
-from core.schemas import patient_model, Appointments_create, Webhook_requests
+from core.schemas import patient_model
 from core.utils import book_appointment
 from core.circuti_breaker import circuit_breaker_open_error
 import logging
-from core.queue import appointments_queue
 logger = logging.getLogger(__name__)
 
 async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):

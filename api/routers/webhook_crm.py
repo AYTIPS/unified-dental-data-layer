@@ -7,19 +7,21 @@ from core.queue import appointments_queue
 from core.models import RegisteredClinics
 from core.schemas import Webhook_requests, webhook_response
 from workers.workers import process_crm_load
+import logging
 
 router= APIRouter( 
     prefix= "/webhook",
     tags= ["CRM Webhooks"]
     )
-  
-    
+logger = logging.getLogger(__name__)
 
 @router.post("/webhook/{crm_type}/{clinic_id}", status_code=202, response_model = webhook_response)
 async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db: Session = Depends(get_db)):
      # check if clinic is there 
+    logger.info(f"webhook received for clinic  {clinic_id}")
     clinic = db.query(RegisteredClinics).filter_by(id=clinic_id).first()
     if not clinic:
+        logger.warning(f"Webhook for invalid clinic_id={clinic_id} | crm={crm_type}")
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail = "clinic not found wwrong webhook url ")
 
     # checks if the crm supported is the one returned 
@@ -38,8 +40,8 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
         redis_client.setex(redis_key, 300, "processing")
 
     retry_cfg = Retry(
-        max=3,                  # total attempts: 1 original + 2 more OR 3 total (depends on RQ version, but idea is "few times")
-        interval=[60, 120, 300] # retry after 60s, then 120s, then 300s
+        max=3, 
+        interval=[60, 120, 300] 
     )
 
 

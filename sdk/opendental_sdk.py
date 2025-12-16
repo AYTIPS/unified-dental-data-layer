@@ -77,7 +77,7 @@ class openDentalApi:
     
     async def create_appointments(self, appointment_data: Appointments_create ):
         endpoint = f"/appointments"
-        body = await appointment_payload(appointment_data)
+        body = await appointment_payload(appointment_data) 
         return  await self._request("POST", endpoint, json=body)
     
 
