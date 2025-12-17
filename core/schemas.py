@@ -111,3 +111,18 @@ class loginrequest(BaseModel):
 
 class logoutresponse(BaseModel):
     message : str 
+
+##################################UserRegistration 
+class usercreate(BaseModel):
+    username:str 
+    email : EmailStr
+    password : str
+    username:str 
+
+class userout(BaseModel):
+    id : str 
+    email : EmailStr 
+    username : str 
+
+    class config:
+        orm_mode = True 
