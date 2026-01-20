@@ -31,5 +31,5 @@ async def registration (payload: usercreate, db :  Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-
+    
     return user

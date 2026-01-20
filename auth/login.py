@@ -29,15 +29,12 @@ async def login(payload: loginrequest, request: Request, db:Session= Depends(get
         raise HTTPException( status.HTTP_429_TOO_MANY_REQUESTS, detail = "Too many login attempt please Try again Later")
     
     user = db.query(Users).filter(Users.email == email).first()
-    if not user or not verify_password(password, hashed_password = user.password):
-       await handle_failed_login(key)
-    
-    redis_client.delete(key)
-
-    access_token = create_access_token(user = user)
-    refresh_token = create_refresh_token(user = user)
-
-    return {
+    if  user and  verify_password(password, hashed_password = user.password):
+        redis_client.delete(key)
+        access_token = create_access_token(user = user)
+        refresh_token = create_refresh_token(user = user)
+        return {
         "access_token" : access_token,
         "refresh_token" : refresh_token
-    }
+             }
+    await handle_failed_login(key)

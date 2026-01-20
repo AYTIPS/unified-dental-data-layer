@@ -68,8 +68,8 @@ async def create_pops(pop_up : create_pop_ups):
 
 async def opendental_pattern_time_build(date_str, start_time, end_time, clinic_timezone):
     #comibinig date and time 
-    start_raw = f"{date_str}{start_time}"
-    end_raw = f"{date_str}{end_time}"
+    start_raw = f"{date_str}:{start_time}"
+    end_raw = f"{date_str}:{end_time}"
 
     start_time = parser.parse(start_raw)
     end_time = parser.parse(end_raw)

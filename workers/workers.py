@@ -2,6 +2,7 @@ from core.database import SessionLocal
 from core.models import Patients, RegisteredClinics, Appointments
 from api.routers import webhook_crm
 from sdk.opendental_sdk import openDentalApi
+from core.schemas import AppointmentRequest
 from core.schemas import patient_model
 from core.utils import book_appointment
 from core.circuti_breaker import circuit_breaker_open_error
@@ -19,25 +20,21 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
 
         patient_data = patient_model(**payload)
 
-        commslog = payload.get("commslog")
-
-        date_str =  payload.get(" Date")
-
-        start_str = payload.get("start_time")
-
-        end_str = payload.get("end_time")
-
-        status = payload.get("status") 
-
-        calendar_id = payload.get("calendar_id")
-
-        event_id = payload.get("event_id")
-
-        contact_id = payload.get("contact_id")
-
-        Note = payload.get("Note")
-
-        pop_up = payload.get("pop_up")
+       appointment_req = AppointmentRequest(
+            date_str = payload.get(" Date"),
+            start_str = payload.get("start_time"),
+            end_str  = payload.get("end_time"),
+            status =  payload.get("status"),
+            calendar_id = 
+            event_id: Optional[str] = None 
+            contact_id : str 
+            Note : Optional[str] = None 
+            pop_up : Optional[str] = None 
+            commslog : Optional[str] = None 
+            pat_Num : int 
+            status: str 
+            clinic_timezone:  str  
+       )
 
         od = openDentalApi(clinic_id)
 

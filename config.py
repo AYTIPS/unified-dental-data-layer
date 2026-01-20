@@ -11,6 +11,7 @@ class Settings (BaseSettings):
     algorithm :        str = Field(..., env = ("algorithm,", "ALGORITHM"))  # type: ignore
     access_token_expire_minutes : float = Field(..., env = ("access_token_expire_minutes", "ACCESS_TOKEN_EXPIRE_MINUTES")) # type: ignore
     refresh_token_expire_days :   float = Field(..., env = ("refresh_token_expire_days", "REFRESH_TOKEN_EXPIRE_DAYS")) # type: ignore  
+    encryption_key : str = Field(..., env = ("encryption_key",  "ENCRYPTION_KEY"))  # type: ignore
 
 
 

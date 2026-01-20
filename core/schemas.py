@@ -1,7 +1,7 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, StringConstraints
+from pydantic import BaseModel, EmailStr, ConfigDict, StringConstraints, Field 
 from datetime import datetime
 from typing import Optional
-from typing import Literal, Annotated
+from typing import Literal, Annotated, List, Dict
 
 
 Datestr = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
@@ -53,17 +53,16 @@ class Appointments_create(BaseModel):
 class Appointments_update(  BaseModel):
     Pattern : str 
     AptDateTime : str 
-    Note : Optional[str] = None
     Op : str 
     AptStatus : str 
 
 class create_commslogs(BaseModel):
     commlogs : str 
-    PatNum : str 
+    PatNum : int 
 
 class create_pop_ups(BaseModel):
     pop_ups: str 
-    PatNum :str 
+    PatNum :int 
 
 
 
@@ -112,7 +111,7 @@ class loginrequest(BaseModel):
 class logoutresponse(BaseModel):
     message : str 
 
-##################################UserRegistration 
+##################################UserRegistration and clinic registration 
 class usercreate(BaseModel):
     username:str 
     email : EmailStr
@@ -126,3 +125,85 @@ class userout(BaseModel):
 
     class config:
         orm_mode = True 
+
+class registerdso(BaseModel):
+    name : str 
+
+class dsoout(BaseModel):
+    id : str 
+    name : str 
+    
+    class config:
+        orm_mode = True 
+
+class operatorymap(BaseModel):
+    calendar_id : str 
+    operatories : List[int]
+
+class cliniccreate(BaseModel):
+    crm_type: str
+    clinic_name : str
+    clinic_number : str 
+    clinic_timezone : str 
+    od_developer_key : str 
+    od_customer_key : str 
+    crm_api_key : str 
+    location_id : str 
+    calendar_id : str 
+    operatory_calendar_map : Dict[str, List[operatorymap]] = Field ()  
+
+class clinicout(BaseModel):
+    id: str 
+    name : str 
+
+    class config:
+        orm_mode = True
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########################Appointment###############################
+class AppointmentRequest(BaseModel):
+    date_str : str
+    start_str: str
+    end_str : str
+    status: str
+    calendar_id: str
+    event_id: Optional[str] = None 
+    contact_id : str 
+    Note : Optional[str] = None 
+    pop_up : Optional[str] = None 
+    commslog : Optional[str] = None 
+    pat_Num : int 
+    status: str 
+    clinic_timezone:  str 
+
+
+
+
+
+
+
+
+
+

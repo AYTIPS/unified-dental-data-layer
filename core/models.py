@@ -38,6 +38,10 @@ class Dso(Base, Autoid):
     clinics = relationship("RegisteredClinics", back_populates= "dso", cascade="all, delete")
     user = relationship("Users", back_populates= "dsos")
 
+    __table_args__ = (
+        UniqueConstraint("user_id", name = "uq_dso_user_id")
+    )
+
 
 
 

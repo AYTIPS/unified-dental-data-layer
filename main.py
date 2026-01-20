@@ -3,10 +3,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from core import database
 from  api.routers import webhook_crm
+from core.middleware import RateLimitMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 import logging 
 
 log = logging.getLogger("uvicorn.error")
+logging.basicConfig(
+    level=logging.INFO,  # or DEBUG
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 origins = ["*"]
 app = FastAPI()
@@ -18,8 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 
 )
-
+app.add_middleware(RateLimitMiddleware)
 app.include_router(webhook_crm.router)
+
 
 @app.on_event("startup")
 def verify_db_on_start():
@@ -28,13 +34,6 @@ def verify_db_on_start():
         log.info(msg)             
     else:
         log.error(msg)
-      
-logging.basicConfig(
-    level=logging.INFO,  # or DEBUG
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-
-
 
 app.get('/')
 async def root():

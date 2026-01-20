@@ -71,7 +71,7 @@ class openDentalApi:
         body =  await patient_payload(patient_data)
         return  await self._request("POST", endpoint, json=body)
     
-    async def get_appointment_operatory(self, operatory: str , dateStart: str , dateEnd : str ):
+    async def get_appointments_in_operatory(self, operatory: str , dateStart: str , dateEnd : str ):
         endpoint = f"/appointment?{operatory}&{dateStart}&{dateEnd}"
         return await self._request("GET", endpoint)
     

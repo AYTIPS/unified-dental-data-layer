@@ -22,7 +22,7 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
     clinic = db.query(RegisteredClinics).filter_by(id=clinic_id).first()
     if not clinic:
         logger.warning(f"Webhook for invalid clinic_id={clinic_id} | crm={crm_type}")
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail = "clinic not found wwrong webhook url ")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail = "clinic not found wrong webhook url ")
 
     # checks if the crm supported is the one returned 
     if  clinic.crm_type.lower() != crm_type.lower():
