@@ -1,10 +1,11 @@
 from core.database import SessionLocal
 from core.models import Patients, RegisteredClinics, Appointments
-from api.routers import webhook_crm
 from sdk.opendental_sdk import openDentalApi
-from core.schemas import AppointmentRequest
+from fastapi import HTTPException, status
 from core.schemas import patient_model
-from core.utils import book_appointment
+from infra.appointment_service import AppointmentService
+from core.schemas import AppointmentRequest
+from sqlalchemy.exc import SQLAlchemyError
 from core.circuti_breaker import circuit_breaker_open_error
 import logging
 logger = logging.getLogger(__name__)
@@ -20,21 +21,25 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
 
         patient_data = patient_model(**payload)
 
-       appointment_req = AppointmentRequest(
-            date_str = payload.get(" Date"),
-            start_str = payload.get("start_time"),
-            end_str  = payload.get("end_time"),
-            status =  payload.get("status"),
-            calendar_id = 
-            event_id: Optional[str] = None 
-            contact_id : str 
-            Note : Optional[str] = None 
-            pop_up : Optional[str] = None 
-            commslog : Optional[str] = None 
-            pat_Num : int 
-            status: str 
-            clinic_timezone:  str  
-       )
+        commslog = payload.get("commslog", "")
+
+        date_str =  payload.get("Date", "")
+
+        start_str = payload.get("start_time", "")
+
+        end_str = payload.get("end_time", "")
+
+        status = payload.get("status", "") 
+
+        calendar_id = payload.get("calendar_id", "")
+
+        event_id = payload.get("event_id", "")
+
+        contact_id = payload.get("contact_id", "")
+
+        Note = payload.get("Note", "")
+
+        pop_up = payload.get("pop_up", "")
 
         od = openDentalApi(clinic_id)
 
@@ -62,11 +67,33 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
                     clinic_id  = clinic_id,
                     )
         
+        appointment_req = AppointmentRequest(
+            date_str = date_str,
+            start_str = start_str,
+            end_str  = end_str,
+            status =  status,
+            calendar_id = calendar_id,
+            event_id = event_id,
+            contact_id =  contact_id,
+            Note =  Note,
+            pop_up = pop_up,
+            commslog = commslog,
+            pat_Num = pat_num,
+            clinic_timezone = timezone 
+       )
 
-        # create appointment for the patient 
-        created_appointment = await book_appointment(od = od , clinic = clinic , date_str = date_str, start_str = start_str, end_str = end_str , status = status, calendar_id = calendar_id , pat_num = pat_num ,  clinic_timezone = timezone, clinic_id = clinic_id , event_id = event_id, Note = Note ,  commlogs = commslog , create_popup = pop_up )
-        if  created_appointment is None:
-            raise ValueError("book_appointment() returned None. Appointment could not be booked.")
+        appointment_service = AppointmentService(db= db , od_client= od, clinic = clinic)
+
+        apt_num =  await appointment_service.book(appointment_req)
+
+        if not apt_num:
+             logger.error("Appointment Failed to get Booked" , extra = {
+                  "clinic" : clinic.id,
+                  "pat_ num" : pat_num,
+                  "contact_id" : contact_id
+                    })
+             raise ValueError("Appointment booking Failed ")
+    
 
         new_appointment = Appointments(
             clinic_id=clinic_id,
@@ -75,7 +102,7 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
             end_time =   end_str,
             date = date_str, 
             status=status,
-            AptNum = created_appointment["AptNum"],
+            AptNum = apt_num,
             calendar_id = calendar_id 
             )                   
         
@@ -85,20 +112,20 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
         db.commit()
         db.refresh(new_patient)
         db.refresh(new_appointment)
-        return pat_num, created_appointment
     
     except circuit_breaker_open_error:
-         logger.warning(" Too many Failures Circuit breaker is still open", clinic_id,  crm_type,
+            logger.warning(" Too many Failures Circuit breaker is still open", clinic_id,  crm_type,
             payload.get("event_id"),
             payload.get("contact_id"))
-         raise
+            raise ValueError("  Opendental is down please try again later")
         
 
-    except Exception as e :
+    except SQLAlchemyError as e :
             db.rollback()
             logger.exception(f"Error processing patient : {e}", clinic_id,  crm_type,
             payload.get("event_id"),
             payload.get("contact_id"))
+            raise HTTPException(status_code=500, detail="Database error occurred")
             
         
     finally:

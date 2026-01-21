@@ -43,7 +43,7 @@ class AppointmentService():
             existing = await self.od.get_appointments_in_operatory(op, date_start, date_end)
         
         
-            if not check_time_slot:
+            if not await check_time_slot(existing, start_dt, end_dt):
                 continue
 
             if AptNum: 

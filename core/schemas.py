@@ -189,13 +189,12 @@ class AppointmentRequest(BaseModel):
     end_str : str
     status: str
     calendar_id: str
-    event_id: Optional[str] = None 
+    event_id: str  
     contact_id : str 
     Note : Optional[str] = None 
     pop_up : Optional[str] = None 
     commslog : Optional[str] = None 
     pat_Num : int 
-    status: str 
     clinic_timezone:  str 
 
 

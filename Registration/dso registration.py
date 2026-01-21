@@ -40,5 +40,6 @@ async def registerDso(payload : registerdso , request: Request, current_user : U
             "user_id" : current_user.id,
             "name" : name 
         })
+        raise HTTPException(status_code = status.HTTP_500_INTERNAL_SERVER_ERROR, detail= "  Couldn't register dso internal server error ")
 
     return dso
