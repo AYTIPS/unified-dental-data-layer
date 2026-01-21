@@ -37,7 +37,7 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
 
         contact_id = payload.get("contact_id", "")
 
-        Note = payload.get("Note", "")
+        Note = payload.get("Notes", "")
 
         pop_up = payload.get("pop_up", "")
 
