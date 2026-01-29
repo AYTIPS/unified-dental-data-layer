@@ -1,6 +1,6 @@
 from fastapi import  APIRouter, Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
-from core.queue import redis_client
+from core.queue import async_redis
 from rq import Retry
 from core.database import get_db
 from core.queue import appointments_queue
@@ -15,7 +15,7 @@ router= APIRouter(
     )
 logger = logging.getLogger(__name__)
 
-@router.post("/webhook/{crm_type}/{clinic_id}", status_code=202, response_model = webhook_response)
+@router.post("/{crm_type}/{clinic_id}", status_code=202, response_model = webhook_response)
 async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db: Session = Depends(get_db)):
      # check if clinic is there 
     logger.info(f"webhook received for clinic  {clinic_id}")
@@ -34,10 +34,10 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
 
     #idempotency to avoid duplicate 
     redis_key = f"webhook processing: {event_id}:{contact_id}"
-    if redis_client.exists(redis_key):
-        raise ValueError(f"duplicate webhook processing :{event_id}:{contact_id}")
+    if await async_redis.exists(redis_key):
+        raise HTTPException(status.HTTP_409_CONFLICT detail = "Dupliacte Webhook")
     else:
-        redis_client.setex(redis_key, 300, "processing")
+        await async_redis.setex(redis_key, 300, "processing")
 
     retry_cfg = Retry(
         max=3, 

@@ -4,7 +4,7 @@ import uuid
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-from core.queue import redis_client
+from core.queue import async_redis
 from auth.oauth2 import decode_token
 
 
@@ -25,12 +25,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         identifier = self._get_identifier(request)
         key = f"rl:{identifier}"
         try: 
-            current_count : int = int((redis_client.incr(key))) #type: ignore[arg-type]
+            current_count: int = int(await async_redis.incr(key))
             if current_count == 1 :
-                redis_client.expire(key, RATE_LIMIT_WINDOW_SECONDS)
+                await async_redis.expire(key, RATE_LIMIT_WINDOW_SECONDS)
 
             if current_count > RATE_LIMIT_MAX_REQUESTS:
-                ttl = redis_client.ttl(key)
+                ttl = await async_redis.ttl(key)
                 retry_after = ttl if ttl and ttl >  0 else RATE_LIMIT_WINDOW_SECONDS   #type: ignore[arg-type]
                 log.warning(f"Rate Limiting hit for this {identifier}, retry_after = {retry_after}",
                             request.method, request.url.path)

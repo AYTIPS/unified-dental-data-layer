@@ -28,4 +28,4 @@ def ping_db() -> tuple[bool, str]:
     except SQLAlchemyError as e:
         return False, f"DB connection FAILED: {e.__class__.__name__}: {e}" 
     
-print("Connecting to DB:", SQLALCHEMY_DATABASE_URL)
+print("Connecting to DB:", "connected")

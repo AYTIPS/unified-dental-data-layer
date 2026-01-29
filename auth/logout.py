@@ -14,8 +14,8 @@ router = APIRouter(
 
 @router.post("/", status_code= 200)
 async def logout(current_user : Users = Depends(get_current_user), db:Session= Depends(get_db)):
-    current_user.token_version = int(current_user.token + 1)
-    db.commit 
+    current_user.token_version = int(current_user.token_version + 1)
+    db.commit()
     return logoutresponse(
         message = "You Have been Logged Out Successfully"
     )

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, func, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, DateTime, func, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.dialects.postgresql import JSON
@@ -90,13 +90,15 @@ class Patients(Base, Autoid):
 
 class Appointments(Base, Autoid):
     __tablename__ = "appointments"
-    AptNum = Column(Integer, nullable = False)
-    event_id = Column(String, nullable = False )
+    AptNum : Mapped[int] = mapped_column(Integer, nullable = True)
+    event_id :Mapped[str] =  mapped_column(String, nullable = False )
     status = Column(String, nullable  = False)
-    start_time = Column(DateTime(timezone= True), nullable = False )
+    start_time = Column(String, nullable = False )
     end_time = Column(String, nullable = False)
     date = Column(String , nullable = False)
     calendar_id = Column(String, nullable = False )
+    commslog_done : Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    popups_done : Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     clinic_id = Column(String, ForeignKey("registered_clinics.id", ondelete="CASCADE"), nullable = False )
     pat_id = Column (String, ForeignKey("patients.id", ondelete="CASCADE"), nullable = False )
     created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
@@ -113,6 +115,22 @@ class UserClinic(Base, Autoid):
     __tablename__ = "userclinic"
     role = Column(String, nullable=False)
     user_id  = Column(String, ForeignKey("users.id"), ondelete="CASCADE", nullable = False)
-    clinic_id = Column(String, ForeignKey("registered_clinics.id"), ondelete= "CASCADE", nullable= False)
+    clinic_id = Column(String, ForeignKey("registered_clinics.id", ondelete= "CASCADE"), nullable= False)
     users = relationship("Users", back_populates="user_clinic",  cascade="all, delete")
-    clinic = relationship("registered_clinics", back_populates="user_clinic",  cascade="all, delete")
+    clinic = relationship("RegisteredClinics", back_populates="user_clinic",  cascade="all, delete")
+
+
+
+
+class Audit_logs(Base, Autoid):
+    __tablename__ = "audit_logs"
+    clinic_id = Column(String, nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=True)
+    action  = Column(String, nullable=False)
+    status = Column(String, nullable =False)
+    source = Column(String, nullable=False)
+    metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone= True), nullable = False, server_default= func.now())
+
+

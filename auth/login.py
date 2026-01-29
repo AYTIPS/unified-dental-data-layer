@@ -1,5 +1,5 @@
 from fastapi import Depends, APIRouter, status, HTTPException, Request
-from core.queue import redis_client
+from core.queue import async_redis
 from  core.database import get_db
 from sqlalchemy.orm import Session
 from core.models import Users
@@ -30,7 +30,7 @@ async def login(payload: loginrequest, request: Request, db:Session= Depends(get
     
     user = db.query(Users).filter(Users.email == email).first()
     if  user and  verify_password(password, hashed_password = user.password):
-        redis_client.delete(key)
+        await async_redis.delete(key)
         access_token = create_access_token(user = user)
         refresh_token = create_refresh_token(user = user)
         return {

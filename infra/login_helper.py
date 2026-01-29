@@ -1,4 +1,4 @@
-from core.queue import redis_client
+from core.queue import async_redis
 from fastapi import HTTPException, status, Request
 
 MAX_LOGIN_ATTEMPTS = 5 
@@ -8,13 +8,13 @@ async def login_attempts(email : str , ip: str ):
     return f"login attempts : {email} : {ip}"
 
 async def get_redis_attempts(key) -> int:
-    attempts_raw = await redis_client.get(key)
-    return int(attempts_raw.decode()) if attempts_raw is not None else 0
+    attempts_raw = await async_redis.get(key)
+    return int(attempts_raw) if attempts_raw is not None else 0
 
 async def increment_attempts_with_key(key):
-    attempts =  await redis_client.incr(key)
+    attempts = await async_redis.incr(key)
     if attempts >= MAX_LOGIN_ATTEMPTS:
-        redis_client.expire(key, LOCK_WINDOWS_SECONDS)
+        await async_redis.expire(key, LOCK_WINDOWS_SECONDS)
     return int(attempts)
 
 

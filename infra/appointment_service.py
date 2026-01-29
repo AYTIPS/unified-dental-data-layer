@@ -1,6 +1,7 @@
 from sdk.opendental_sdk import openDentalApi
 from fastapi import Depends
 from  sqlalchemy.orm  import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from core.models import Appointments
 from core.schemas import AppointmentRequest, Appointments_create, Appointments_update, create_commslogs, create_pop_ups
 import logging 
@@ -16,7 +17,20 @@ class AppointmentService():
         self.clinic = clinic
 
     async def book (self, req: AppointmentRequest ):
-        AptNum = await self.get_existing_aptnum_from_db(req)
+        reserve =   await self.book_reserve(req)
+        existing_aptnum = reserve.AptNum if (reserve and reserve.AptNum ) else None 
+
+        if reserve and existing_aptnum:
+            change = bool(
+            reserve.status != req.status
+            or reserve.date != req.date_str
+            or reserve.start_time != req.start_str
+            or str(reserve.end_time) != str(req.end_str)
+            )
+
+            if not change:
+                return existing_aptnum
+
         operatories = await self.get_operatories(req)
 
         if not operatories:
@@ -25,14 +39,34 @@ class AppointmentService():
     
         start_dt, end_dt , pattern = await self.build_time(req)
 
-        AptNum = await self.book_into_operatory( req, operatories = operatories , start_dt = start_dt , end_dt = end_dt, pattern = pattern, AptNum = AptNum)
+        AptNum = await self.book_into_operatory( req, operatories = operatories , start_dt = start_dt , end_dt = end_dt, pattern = pattern, AptNum  = existing_aptnum)
 
         if not AptNum:
             log.warning("No timeslot available for this Appointment in any operatory")
             return None 
         
-        await self.handle_commslog(req)
-        await self.handle_popups(req)
+        log.info(f"Appointment is being booked for {AptNum} in {operatories} for clinic {self.clinic.clinic_name}")
+        if reserve:
+            reserve.AptNum = int(AptNum)
+            reserve.status = req.status   # type: ignore
+            reserve.date = req.date_str   # type: ignore
+            reserve.start_time = start_dt   # type: ignore
+            reserve.end_time = end_dt    # type: ignore
+            self.db.commit()
+
+        
+        if reserve and not reserve.commslog_done and req.commslog:   # type: ignore
+            log.info(f"commslog is being created for Aptnum {AptNum} ")
+            await self.handle_commslog(req)
+            reserve.commslog_done = True
+            self.db.commit()
+
+        if  reserve and not reserve.popups_done and req.pop_up:   # type: ignore
+            log.info(f"popups is being created for Aptnum {AptNum} ")
+            await self.handle_popups(req)
+
+        return AptNum
+
 
     async def book_into_operatory(self,  req: AppointmentRequest, operatories: list , start_dt, end_dt,  pattern : str  ,  AptNum : int | None   ):
         #Create date pattern for date time start and date time end
@@ -55,17 +89,63 @@ class AppointmentService():
                     start_dt = start_dt,
                     AptNum= AptNum
                     )
-            else: 
-                log.info(f"created  Appointment for Aptnum {AptNum} in  Op  {op}")
-                await self.create_appointment(
+                
+                return AptNum
+            
+            log.info(f"creating  Appointment for Aptnum {AptNum} in  Op  {op}")
+            created = await self.create_appointment(
                     pattern = pattern,
                     op = op,
                     req = req,  
                     start_dt = start_dt 
                 )
-
+            
+            AptNum = created["AptNum"]
             return AptNum
         return None 
+    
+
+
+    async def book_reserve(self, req:AppointmentRequest):
+        if  not req.event_id:
+            return None 
+
+        row = self.db.query(Appointments).filter_by(clinic_id = self.clinic.id , event_id = req.event_id).first()
+        if row:
+            return row 
+        
+        row = Appointments(
+        clinic_id=self.clinic.id,
+        event_id=req.event_id,
+        status=req.status,
+        start_time=req.start_str,   
+        end_time=req.end_str,
+        date=req.date_str,
+        calendar_id=req.calendar_id,
+        pat_id=req.pat_id,          
+        AptNum=None,               
+         )
+        
+        try:
+            self.db.add(row)
+            self.db.commit()
+            self.db.refresh(row)
+            return row 
+        
+        except IntegrityError:
+            self.db.rollback()
+            return (
+            self.db.query(Appointments)
+            .filter_by(clinic_id=self.clinic.id, event_id=req.event_id)
+            .first()
+        )
+
+        except SQLAlchemyError:
+        # Anything else is a real DB issue — stop
+            self.db.rollback()
+            raise
+
+
 
     async def create_appointment( self , req: AppointmentRequest, pattern, op, start_dt):
         appointment = Appointments_create(
@@ -76,7 +156,7 @@ class AppointmentService():
             Note = req.Note,
             AptStatus = req.status
         )
-        return self.od.create_appointments( appointment_data = appointment)
+        return await  self.od.create_appointments( appointment_data = appointment)
     
     async def update_appointment(self, req: AppointmentRequest, pattern, AptNum, op, start_dt): 
         appointment = Appointments_update(
@@ -86,7 +166,7 @@ class AppointmentService():
             AptStatus= req.status
         )
 
-        return self.od.update_appointment(Aptnum= AptNum, appointment_data = appointment)
+        return  await self.od.update_appointment(Aptnum= AptNum, appointment_data = appointment)
     
     async def handle_commslog(self, req : AppointmentRequest):
         if not req.commslog:
@@ -110,18 +190,6 @@ class AppointmentService():
         )
 
         await self.od.create_pops(pops = pops )
-    
-
-    
-    async def  get_existing_aptnum_from_db(self, req: AppointmentRequest):
-        if not req.event_id:
-            return None 
-        
-        existing = self.db.query(Appointments).filter_by(clinic_id = self.clinic.id, event_id = req.event_id).first()
-        if not existing :
-            return None 
-        
-        return int(existing.AptNum) # type: ignore
 
 
     async def  get_operatories(self, req: AppointmentRequest):
@@ -134,3 +202,5 @@ class AppointmentService():
         return (
             await  opendental_pattern_time_build(req.date_str, req.start_str, req.end_str, req.clinic_timezone)
         )
+    
+

@@ -63,7 +63,7 @@ class openDentalApi:
                  
     
     async def search_patients(self, last_name:str, date_of_birth: str):
-        endpoint = f"/patients?Lname={last_name}&birthDate={date_of_birth}"
+        endpoint = f"/patients?Lname={last_name}&BirthDate={date_of_birth}"
         return await self._request("GET", endpoint)
 
     async def create_patients(self, patient_data: patient_model ):
@@ -72,7 +72,7 @@ class openDentalApi:
         return  await self._request("POST", endpoint, json=body)
     
     async def get_appointments_in_operatory(self, operatory: str , dateStart: str , dateEnd : str ):
-        endpoint = f"/appointment?{operatory}&{dateStart}&{dateEnd}"
+        endpoint = f"/appointments?Op={operatory}&dateStart={dateStart}&dateEnd={dateEnd}"
         return await self._request("GET", endpoint)
     
     async def create_appointments(self, appointment_data: Appointments_create ):

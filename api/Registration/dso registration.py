@@ -34,6 +34,10 @@ async def registerDso(payload : registerdso , request: Request, current_user : U
         db.add(dso)
         db.commit()
         db.refresh(dso)
+        log.info(" DSO Account has been successfully created", extra = { 
+            "user_id" : current_user.id,
+            "dso_name" : dso.name
+            })
     except SQLAlchemyError:
         db.rollback()
         log.exception("Database Error while creating DSO", extra = {

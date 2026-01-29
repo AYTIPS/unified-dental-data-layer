@@ -1,7 +1,7 @@
 from core.database import SessionLocal
 from core.models import Patients, RegisteredClinics, Appointments
 from sdk.opendental_sdk import openDentalApi
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from core.schemas import patient_model
 from infra.appointment_service import AppointmentService
 from core.schemas import AppointmentRequest
@@ -93,25 +93,6 @@ async def process_crm_load (clinic_id : str , crm_type: str , payload: dict ):
                   "contact_id" : contact_id
                     })
              raise ValueError("Appointment booking Failed ")
-    
-
-        new_appointment = Appointments(
-            clinic_id=clinic_id,
-            event_id=event_id,
-            start_time =  start_str,
-            end_time =   end_str,
-            date = date_str, 
-            status=status,
-            AptNum = apt_num,
-            calendar_id = calendar_id 
-            )                   
-        
-
-        db.add(new_patient)
-        db.add(new_appointment)
-        db.commit()
-        db.refresh(new_patient)
-        db.refresh(new_appointment)
     
     except circuit_breaker_open_error:
             logger.warning(" Too many Failures Circuit breaker is still open", clinic_id,  crm_type,

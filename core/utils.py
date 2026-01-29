@@ -52,7 +52,6 @@ async def appointment_payload_update (appointment :  Appointments_update):
       "Pattern" : appointment.Pattern,
       "Op" : appointment.Op,
       "AptStatus" :appointment.AptStatus,
-      "Note" : appointment.Note
 }
 
 async def create_commlog(commlogs : create_commslogs):
@@ -116,77 +115,6 @@ async def check_time_slot(existing_appt, new_start_time , new_end_time ):
             return False 
     return True 
  
-
-async def book_appointment (od, clinic, date_str, start_str, end_str ,status, calendar_id, pat_num, clinic_timezone, clinic_id, event_id , Note , commlogs: str | None = None, create_popup: str | None = None ):
-     db = SessionLocal()
-     Aptnum_check = db.query(Appointments).filter_by(clinic_id = clinic_id , event_id = event_id).first()
-     AptNum =  Aptnum_check.AptNum if Aptnum_check else None 
-     operatories =  await opendental_get_operatory_status(clinic, status, calendar_id ) or []
-     if not operatories :
-        logger.error(f"No Operatories found for this calendar")
-        return None
-    
-     DateTimeStart, DateTimeEnd , pattern = await  opendental_pattern_time_build (date_str , start_str, end_str, clinic_timezone = clinic_timezone)
-     fmn = "%Y-%m-%d"
-     fake_date_start  = datetime.strptime(DateTimeStart, fmt)
-     real_date_start = datetime.strftime(fake_date_start, fmn)
-     fake_date_end =  datetime.strptime(DateTimeEnd, fmt)
-     real_date_end =  datetime.strftime(fake_date_end, fmn)
-     for op in operatories:
-            existing = await  od.get_appointments_operatory(op, real_date_start, real_date_end)
-            #check if time_slot is full 
-            if  await check_time_slot(existing ,DateTimeStart, DateTimeEnd ):
-                print(f"creating appointment in {op} --booking appointment ")
-                appointment = Appointments_create(
-                    PatNum = pat_num,
-                    Pattern = pattern,
-                    AptDateTime =  DateTimeStart,
-                    Op = op,
-                    Note = Note,
-                    AptStatus = status
-                )
-
-                if AptNum is not None :
-                    appointment_update = Appointments_update(
-                        Pattern  = pattern,
-                        AptDateTime =  DateTimeStart, 
-                        Note =  Note, 
-                        Op = op, 
-                        AptStatus =  status 
-                    )
-                    await od.update_appointment(AptNum, appointment_update)
-
-                else:
-                    await od.create_appointments(appointment_data = appointment ) 
-            
-            if commlogs:
-                logs  = create_commslogs(
-                    commlogs = commlogs,
-                    PatNum = pat_num
-                    )
-                await od.create_commslog(logs)
-
-            if create_popup:
-                popup = create_pop_ups(
-                    pop_ups = create_popup ,
-                    PatNum = pat_num
-                )
-                await od.create_pop(popup)
-                db.close()
-                return (AptNum)
-                
-            else:
-                print(" No free operatory found for that time slot.")
-
-
-
-
-
-
-
-
-
-
                 ##############################GHL NORMALIZATION##############################
 def create_contacts(data: create_contact_ghl):
     return{

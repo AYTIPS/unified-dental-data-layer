@@ -31,7 +31,7 @@ class Webhook_requests(BaseModel):
 
 
 class patient_model(BaseModel):
-    contact_id : str
+
     FName :str
     LName: str
     Gender: str  
@@ -193,6 +193,7 @@ class AppointmentRequest(BaseModel):
     contact_id : str 
     Note : Optional[str] = None 
     pop_up : Optional[str] = None 
+    pat_id : str 
     commslog : Optional[str] = None 
     pat_Num : int 
     clinic_timezone:  str 
