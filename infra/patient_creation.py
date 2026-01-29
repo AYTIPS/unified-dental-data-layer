@@ -1,7 +1,7 @@
 from sdk.opendental_sdk import openDentalApi
 from core.models import Patients
 from core.schemas import patient_model
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import logging
 
 log = logging.getLogger(__name__)
@@ -50,7 +50,24 @@ class PatientService():
     async  def finalize_into_db(self, row: Patients, pat_num):
         try:
             row.pat_num = pat_num
-            self
+            self.db.commit ()
+            return(row.id, pat_num)
+        except IntegrityError:
+            self.db.rollback()
+            existing = (
+                self.db.query(Patients)
+                .filter_by(clinic_id=self.clinic_id, pat_num=pat_num)
+                .first()
+            )
+            if existing:
+                return (existing.id, int(existing.pat_num))
+            raise
+
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+
+
     async def resolve_patnum (self, pat: patient_model, contact_id : str ):
         if not contact_id:
             return None
@@ -61,6 +78,7 @@ class PatientService():
         )
         if row.pat_num:
             return(row.id, row.pat_num)
+        
         
         try:
            matches =  await self.od.search_patients(last_name = pat.LName, date_of_birth = pat.Birthdate)
@@ -75,6 +93,7 @@ class PatientService():
 
         if matches:
             pat_num = matches[0]["PatNum"]
+            return  await self.finalize_into_db(row, pat_num)
                   
         try:
             log.info(f"creating patient on od for contact_id{contact_id} in clinic {self.clinic_id}") 
@@ -85,6 +104,7 @@ class PatientService():
 
         if created:
             pat_num = created["PatNum"] 
+            return await self.finalize_into_db(row, pat_num)
             
         
         

@@ -31,15 +31,14 @@ class Webhook_requests(BaseModel):
 
 
 class patient_model(BaseModel):
-
-    FName :str
+    FName: str
     LName: str
-    Gender: str  
-    Address: str 
-    Birthdate: str 
-    WirelessPhone:str 
-    Email: Optional[EmailStr] 
-    position : Optional[str]
+    Gender: Optional[str] = None
+    Address: Optional[str] = None
+    Birthdate: Optional[str] = None
+    WirelessPhone: Optional[str] = None
+    Email: Optional[EmailStr] = None
+    position: Optional[str] = None
 
 
 class Appointments_create(BaseModel):
