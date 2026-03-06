@@ -14,14 +14,15 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-origins = ["*"]
+origins = ["https://frontend-code-mg3m.vercel.app"]
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+    expose_headers=["X-Request-ID", "Retry-After"],
 
 )
 app.add_middleware(RateLimitMiddleware)
