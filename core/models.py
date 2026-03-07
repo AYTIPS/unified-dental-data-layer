@@ -95,6 +95,8 @@ class Appointments(Base, Autoid):
     AptNum : Mapped[int] = mapped_column(Integer, nullable = True)
     event_id :Mapped[str] =  mapped_column(String, nullable = False )
     status = Column(String, nullable  = False)
+    previous_status = Column(String, nullable=True)
+    status_changed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     start_time = Column(String, nullable = False )
     end_time = Column(String, nullable = False)
     date = Column(String , nullable = False)

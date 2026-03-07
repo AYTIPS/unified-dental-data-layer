@@ -4,6 +4,7 @@ from  sqlalchemy.orm  import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from core.models import Appointments
 from core.schemas import AppointmentRequest, Appointments_create, Appointments_update, create_commslogs, create_pop_ups
+from datetime import datetime, timezone
 import logging 
 from core.utils import check_time_slot, opendental_get_operatory_status, opendental_pattern_time_build
 
@@ -15,6 +16,17 @@ class AppointmentService():
         self.od = od_client
         self.db = db
         self.clinic = clinic
+
+    def _utcnow(self):
+        return datetime.now(timezone.utc)
+
+    def _apply_status_transition(self, row: Appointments, new_status: str):
+        if row.status == new_status:
+            return
+
+        row.previous_status = row.status
+        row.status = new_status
+        row.status_changed_at = self._utcnow()
 
     async def book (self, req: AppointmentRequest ):
         reserve =   await self.book_reserve(req)
@@ -48,7 +60,7 @@ class AppointmentService():
         logger.info(f"Appointment is being booked for {AptNum} in {operatories} for clinic {self.clinic.clinic_name}")
         if reserve:
             reserve.AptNum = int(AptNum)
-            reserve.status = req.status   # type: ignore
+            self._apply_status_transition(reserve, req.status)
             reserve.date = req.date_str   # type: ignore
             reserve.start_time = start_dt   # type: ignore
             reserve.end_time = end_dt    # type: ignore
@@ -118,6 +130,8 @@ class AppointmentService():
         clinic_id=self.clinic.id,
         event_id=req.event_id,
         status=req.status,
+        previous_status=None,
+        status_changed_at=self._utcnow(),
         start_time=req.start_str,   
         end_time=req.end_str,
         date=req.date_str,

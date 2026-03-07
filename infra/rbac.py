@@ -19,10 +19,21 @@ def get_clinic_role(db, user_id: str, clinic_id: str):
         ). first()
             )
 
-def require_dso_manage(db, user_id:str, dso_id: str):
+def require_dso_access(db, user_id: str, dso_id: str):
     role = get_dso_role(db, user_id, dso_id)
-    if not role or role.role not in {RoleType.ADMIN , RoleType.MANAGER}:
+    if not role:
+        logger.warning("No access to this DSO", extra={
+            "dso": dso_id,
+            "user": user_id
+        })
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="No access to this DSO")
+    return role
+
+def require_dso_manage(db, user_id:str, dso_id: str):
+    role = require_dso_access(db, user_id, dso_id)
+    if role.role not in {RoleType.ADMIN , RoleType.MANAGER}:
         logger.warning("Unauthorized access", extra= {
+            "dso": dso_id,
             "user": user_id
         })
         raise HTTPException(status.HTTP_403_FORBIDDEN,detail = "Not allowed for this DSO")
@@ -35,16 +46,21 @@ def require_clinic_access(db, user_id: str, clinic_id: str ):
             "Clinic": clinic_id
         })
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail= "Clinic Not Found")
+
+    # A DSO-level membership unlocks all clinics under that DSO.
     if clinic.dso_id:
         dso_role = get_dso_role(db, user_id, clinic.dso_id)
         if dso_role:
             return clinic
-        
+
+    # A clinic-level membership unlocks only that clinic, even inside a DSO.
     clinic_role = get_clinic_role(db, user_id, clinic_id)
     if clinic_role:
         return clinic
+
     logger.warning("No access to this clinic", extra= {
-            "Clinic": clinic_id
+            "Clinic": clinic_id,
+            "user": user_id
         })
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail= "No access to this clinic")
     
