@@ -6,7 +6,7 @@ from core.database import get_db
 from core.queue import appointments_queue
 from core.models import RegisteredClinics
 from core.schemas import Webhook_requests, webhook_response
-from workers.workers import process_crm_load
+from workers.workers import process_crm_load_job
 import logging
 
 router= APIRouter( 
@@ -46,7 +46,7 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
 
 
     #queue the job 
-    job = appointments_queue.enqueue(process_crm_load, payload.model_dump(), crm_type = crm_type, clinic_id = clinic_id, retry =  retry_cfg)
+    job = appointments_queue.enqueue(process_crm_load_job, clinic_id, crm_type, payload_dict, retry =  retry_cfg)
 
     return {"status" : status.HTTP_200_OK ,
             "payload": payload,

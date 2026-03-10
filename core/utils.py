@@ -18,7 +18,7 @@ async def retry_with_bak_off ( func, retries: int = 5, base_delay : int = 1 , re
         try:
             return await func()
         except retry_on as e:
-            print( f"retry {attempt+1} failed due to {e}. Waiting {delay} before next try")
+            logger.warning(f"Retry {attempt + 1} failed due to request error: {e}. Waiting {delay}s")
             await asyncio.sleep(delay)
             delay *= 2
 

@@ -6,11 +6,11 @@ from auth.oauth2 import get_current_user
 from core.models import Users, RegisteredClinics, Dso
 from  auth.security import encrypt_secret
 import logging
+import secrets
 from sqlalchemy.exc import SQLAlchemyError
 from core.schemas import clinicout
 
 log = logging.getLogger(__name__)
-
 
 router = APIRouter(
     prefix = "/clinics",
@@ -19,7 +19,7 @@ router = APIRouter(
 
 @router.post("/",  status_code = status.HTTP_201_CREATED, response_model= clinicout)
 async def standalone_clinic(payload : cliniccreate,  request: Request, db: Session = Depends(get_db), current_user : Users = Depends(get_current_user)):
-
+    raw_webhook_secret = secrets.token_urlsafe(32)
     crm_type = payload.crm_type
     clinic_name  = payload.clinic_name
     clinic_number = payload.clinic_number
@@ -48,6 +48,7 @@ async def standalone_clinic(payload : cliniccreate,  request: Request, db: Sessi
         od_developer_key = encrypt_secret (od_developer_key),
         od_customer_key = encrypt_secret(od_customer_key), 
         crm_api_key = encrypt_secret(crm_api_key),
+        webhook_secret = encrypt_secret(raw_webhook_secret),
         location_id = location_id,
         calendar_id = encrypt_secret(calendar_id) ,
         operatory_calendar_map = operatory_calendar_map
@@ -80,6 +81,7 @@ async def standalone_clinic(payload : cliniccreate,  request: Request, db: Sessi
 @router.post("/dso/{dso_id}", status_code= status.HTTP_201_CREATED, response_model= clinicout)
 async def dso_clinic(dso_id : str , payload:cliniccreate, request: Request, db: Session = Depends(get_db), current_user : Users = Depends(get_current_user)):
 
+    raw_webhook_secret = secrets.token_urlsafe(32)
     crm_type = payload.crm_type
     clinic_name  = payload.clinic_name
     clinic_number = payload.clinic_number
@@ -107,6 +109,7 @@ async def dso_clinic(dso_id : str , payload:cliniccreate, request: Request, db: 
         od_developer_key = encrypt_secret (od_developer_key),
         od_customer_key = encrypt_secret(od_customer_key), 
         crm_api_key = encrypt_secret(crm_api_key),
+        webhook_secret = encrypt_secret(raw_webhook_secret),
         location_id = location_id,
         calendar_id = encrypt_secret(calendar_id) ,
         operatory_calendar_map = operatory_calendar_map,

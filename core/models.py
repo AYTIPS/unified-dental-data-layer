@@ -56,6 +56,7 @@ class RegisteredClinics (Base, Autoid):
     od_developer_key = Column(String, nullable = False)
     od_customer_key = Column(String, nullable = False)
     crm_api_key = Column(String, nullable = False)
+    webhook_secret = Column(String, nullable=True)
     location_id = Column(String, nullable = False)
     calendar_id = Column(String, nullable = False )
     operatory_calendar_map = Column(JSON, nullable=True)
