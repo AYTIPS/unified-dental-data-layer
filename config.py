@@ -13,6 +13,8 @@ class Settings (BaseSettings):
     refresh_token_expire_days :   int = Field(..., env = ("refresh_token_expire_days", "REFRESH_TOKEN_EXPIRE_DAYS")) # type: ignore  
     encryption_key : str = Field(..., env = ("encryption_key",  "ENCRYPTION_KEY"))  # type: ignore
     invite_ttl_hours: int = Field(..., env = ("invite_ttl_hours", "INVITE_TTL_HOURS")) # type: ignore
+    redis_url: str = Field(..., env=("redis_url", "REDIS_URL"))  # type: ignore
+
 
 
 
