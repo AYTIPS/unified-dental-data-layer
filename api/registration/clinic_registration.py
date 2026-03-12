@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from  core.schemas import cliniccreate
 from auth.oauth2 import get_current_user
-from core.models import Users, RegisteredClinics, Dso
+from core.models import Users, RegisteredClinics, Dso, RoleAssignment, ScopeType, RoleType
 from  auth.security import encrypt_secret
+from infra.rbac import require_dso_manage
 import logging
 import secrets
 from sqlalchemy.exc import SQLAlchemyError
@@ -51,16 +52,28 @@ async def standalone_clinic(payload : cliniccreate,  request: Request, db: Sessi
         webhook_secret = encrypt_secret(raw_webhook_secret),
         location_id = location_id,
         calendar_id = encrypt_secret(calendar_id) ,
-        operatory_calendar_map = operatory_calendar_map
+        operatory_calendar_map = operatory_calendar_map,
+        owner_id = current_user.id,
         )
     try:
         db.add(clinic)
+        db.flush()
+
+        assignment = RoleAssignment(
+            user_id=current_user.id,
+            scope_type=ScopeType.CLINIC,
+            clinic_id=clinic.id,
+            role=RoleType.ADMIN,
+            created_by=current_user.id,
+        )
+        db.add(assignment)
         db.commit()
         db.refresh(clinic)
 
         log.info("Account has been successfully created", extra = { 
             "user_id" : current_user.id,
-            "clinic_name" : clinic.clinic_name
+            "clinic_name" : clinic.clinic_name,
+            "owner_id" : current_user.id,
             })
     except SQLAlchemyError:
         db.rollback()
@@ -93,9 +106,19 @@ async def dso_clinic(dso_id : str , payload:cliniccreate, request: Request, db: 
     calendar_id = payload.calendar_id 
     operatory_calendar_map  = payload.operatory_calendar_map
 
-    dso = db.query(Dso).filter(Dso.id == dso_id, Dso.user_id == current_user.id ).first()
+    dso = db.query(Dso).filter(Dso.id == dso_id).first()
     if not dso:
-        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail="Dso Not Found for this User")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dso Not Found"
+        )
+
+    require_dso_manage(db=db, user_id = current_user.id, dso_id=dso_id)
+    log.info("User authorized to create clinic in DSO", extra={
+        "user_id": current_user.id,
+        "dso_id": dso_id,
+        "request_id": request.state.request_id,
+    })
     existing = db.query(RegisteredClinics).filter(RegisteredClinics.owner_id == current_user.id, RegisteredClinics.dso_id == dso_id, RegisteredClinics.clinic_number == clinic_number ). first()
 
     if existing:
@@ -113,7 +136,7 @@ async def dso_clinic(dso_id : str , payload:cliniccreate, request: Request, db: 
         location_id = location_id,
         calendar_id = encrypt_secret(calendar_id) ,
         operatory_calendar_map = operatory_calendar_map,
-        owner_id = current_user.id,
+        owner_id = dso.user_id,
         dso_id = dso_id
         )
     

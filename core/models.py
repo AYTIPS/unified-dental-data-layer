@@ -55,7 +55,7 @@ class RegisteredClinics (Base, Autoid):
     od_developer_key = Column(String, nullable = False)
     od_customer_key = Column(String, nullable = False)
     crm_api_key = Column(String, nullable = False)
-    webhook_secret = Column(String, nullable=True)
+    webhook_secret: Mapped[str] = mapped_column(String, nullable=True)
     location_id = Column(String, nullable = False)
     calendar_id = Column(String, nullable = False )
     operatory_calendar_map = Column(JSON, nullable=True)
@@ -140,7 +140,7 @@ class RoleAssignment(Base, Autoid):
 
     user_id = Column(String, ForeignKey("users.id", ondelete= "CASCADE"), nullable= False)
     scope_type: Mapped[ScopeType] = mapped_column(Enum(ScopeType, name="scope_type_enum"), nullable= False)
-    role: Mapped[RoleType] = mapped_column(Enum(RoleType, name = "role_type_enum"))
+    role: Mapped[RoleType] = mapped_column(Enum(RoleType, name = "role_type_enum", nullable = False))
     dso_id = Column(String, ForeignKey("Dsos.id", ondelete= "CASCADE"), nullable= True)
     clinic_id = Column(String, ForeignKey("registered_clinics.id", ondelete="CASCADE"), nullable = True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")

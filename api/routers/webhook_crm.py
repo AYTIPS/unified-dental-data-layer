@@ -7,7 +7,9 @@ from core.queue import appointments_queue
 from core.models import RegisteredClinics
 from core.schemas import Webhook_requests, webhook_response
 from workers.workers import process_crm_load_job
+from infra.webhook_secret import WEBHOOK_SECRET_HEADER, verify_webhook_secret_header
 import logging
+
 
 router= APIRouter( 
     prefix= "/webhook",
@@ -16,7 +18,7 @@ router= APIRouter(
 logger = logging.getLogger(__name__)
 
 @router.post("/{crm_type}/{clinic_id}", status_code=202, response_model = webhook_response)
-async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db: Session = Depends(get_db)):
+async def webhooks(crm_type: str, clinic_id: str, request: Request, payload: Webhook_requests , db: Session = Depends(get_db)):
      # check if clinic is there 
     logger.info(f"webhook received for clinic  {clinic_id}")
     clinic = db.query(RegisteredClinics).filter_by(id=clinic_id).first()
@@ -27,6 +29,10 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
     # checks if the crm supported is the one returned 
     if  clinic.crm_type.lower() != crm_type.lower():
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail= "incorrect webhook url")
+    
+    Provided_secret = request.headers.get(WEBHOOK_SECRET_HEADER)
+    verify_webhook_secret_header(provided_secret= Provided_secret, stored_secret_encrypted= clinic.webhook_secret)
+
     #extract payload for redis use 
     payload_dict = payload.model_dump()
     event_id = payload_dict.get("event_id")
@@ -43,8 +49,6 @@ async def webhooks(crm_type: str, clinic_id: str, payload: Webhook_requests , db
         max=3, 
         interval=[60, 120, 300] 
     )
-
-
     #queue the job 
     job = appointments_queue.enqueue(process_crm_load_job, clinic_id, crm_type, payload_dict, retry =  retry_cfg)
 
