@@ -2,15 +2,23 @@ from sdk.opendental_sdk import openDentalApi
 from fastapi import Depends
 from  sqlalchemy.orm  import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from core.models import Appointments, RegisteredClinics
+from core.models import Appointments, RegisteredClinics, AppointmentSyncLog
 from core.schemas import AppointmentRequest, Appointments_create, Appointments_update, create_commslogs, create_pop_ups
 from datetime import datetime, timezone
+from infra.appointment_sync_log_helper import AppointmentSyncLogService
+from dataclasses import dataclass 
 import logging 
-from typing import Any
+from typing import Any, Literal
 from core.utils import check_time_slot, fmt, opendental_get_operatory_status, opendental_pattern_time_build
 
 logger = logging.getLogger(__name__)
 
+BookingAction = Literal["created", "updated", "unchanged", "create", "update", "unchanged"]
+
+@dataclass
+class AppointmentBookingResult:
+    apt_num: int
+    action: BookingAction
 
 class AppointmentService():
     def __init__(self, db: Session, clinic: RegisteredClinics, od_client: openDentalApi) : 
@@ -32,7 +40,8 @@ class AppointmentService():
     def _format_od_datetime(self, value: datetime) -> str:
         return value.strftime(fmt)
 
-    async def book(self, req: AppointmentRequest) -> int | None:
+    async def book(self, req: AppointmentRequest, * , sync_log_service: AppointmentSyncLogService | None = None,
+        sync_log: AppointmentSyncLog | None = None,) -> AppointmentBookingResult | None:
         start_dt, end_dt , pattern = await self.build_time(req)
         start_text = self._format_od_datetime(start_dt)
         end_text = self._format_od_datetime(end_dt)
@@ -49,7 +58,16 @@ class AppointmentService():
             )
 
             if not change:
-                return existing_aptnum
+                if sync_log_service and sync_log:
+                    sync_log_service.mark_operation(sync_log, operation="unchanged")
+                return AppointmentBookingResult(
+                    apt_num=int(existing_aptnum),
+                    action="unchanged",
+                )
+            
+        intended_operation: BookingAction = "update" if existing_aptnum else "create"
+        if sync_log_service and sync_log:
+            sync_log_service.mark_operation(sync_log, operation=intended_operation)
 
         operatories = await self.get_operatories(req)
 
@@ -57,15 +75,15 @@ class AppointmentService():
             logger.warning("No Operatories found for this Calendar ")
             return None 
 
-        AptNum = await self.book_into_operatory( req, operatories = operatories , start_dt = start_dt , end_dt = end_dt, pattern = pattern, AptNum  = existing_aptnum)
+        booking = await self.book_into_operatory( req, operatories = operatories , start_dt = start_dt , end_dt = end_dt, pattern = pattern, AptNum  = existing_aptnum)
 
-        if not AptNum:
+        if not booking:
             logger.warning("No timeslot available for this Appointment in any operatory")
             return None 
         
-        logger.info(f"Appointment is being booked for {AptNum} in {operatories} for clinic {self.clinic.clinic_name}")
+        logger.info(f"Appointment is being booked for {booking.apt_num} in {operatories} for clinic {self.clinic.clinic_name}")
         if reserve:
-            reserve.AptNum = int(AptNum)
+            reserve.AptNum = booking.apt_num
             self._apply_status_transition(reserve, req.status)
             reserve.date = req.date_str   # type: ignore
             reserve.start_time = start_text   # type: ignore
@@ -74,16 +92,16 @@ class AppointmentService():
 
         
         if reserve and not reserve.commslog_done and req.commslog:   # type: ignore
-            logger.info(f"commslog is being created for Aptnum {AptNum} ")
+            logger.info(f"commslog is being created for Aptnum {booking.apt_num} ")
             await self.handle_commslog(req)
             reserve.commslog_done = True
             self.db.commit()
 
         if  reserve and not reserve.popups_done and req.pop_up:   # type: ignore
-            logger.info(f"popups is being created for Aptnum {AptNum} ")
+            logger.info(f"popups is being created for Aptnum {booking.apt_num} ")
             await self.handle_popups(req)
 
-        return AptNum
+        return booking
 
 
     async def book_into_operatory(
@@ -94,7 +112,7 @@ class AppointmentService():
         end_dt: datetime,
         pattern: str,
         AptNum: int | None,
-    ) -> int | None:
+    ) -> AppointmentBookingResult | None:
         #Create date pattern for date time start and date time end
         date_start = start_dt.strftime("%Y-%m-%d")
         date_end = end_dt.strftime("%Y-%m-%d")
@@ -116,7 +134,7 @@ class AppointmentService():
                     AptNum= AptNum
                     )
                 
-                return AptNum
+                return AppointmentBookingResult(apt_num = int(AptNum), action = "updated")
             
             logger.info(f"creating  Appointment for Aptnum {AptNum} in  Op  {op}")
             created = await self.create_appointment(
@@ -129,8 +147,11 @@ class AppointmentService():
             created_aptnum = created.get("AptNum")
             if created_aptnum is None:
                 return None
-            AptNum = int(created_aptnum)
-            return AptNum
+            return AppointmentBookingResult(
+                apt_num=int(created_aptnum),
+                action="created",
+            )
+
         return None 
     
 

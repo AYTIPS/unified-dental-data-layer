@@ -76,11 +76,20 @@ class AppointmentSyncLogService:
         self.db.refresh(sync_log)
         return sync_log
     
+    def mark_operation(self, sync_log: AppointmentSyncLog, *, operation: str) -> AppointmentSyncLog:
+        sync_log.operation = operation
+        self.db.commit()
+        self.db.refresh(sync_log)
+        return sync_log
+    
 
 
-    def mark_success(self, sync_log: AppointmentSyncLog, *, reason: str ="Sync completed successfully", appointment_id : Optional[uuid.UUID]= None, pat_id: Optional[uuid.UUID]= None, apt_num: Optional[int]= None) -> AppointmentSyncLog:
+    def mark_success(self, sync_log: AppointmentSyncLog, *, reason: str ="Sync completed successfully", appointment_id : Optional[uuid.UUID]= None,  operation: str, pat_id: Optional[uuid.UUID]= None, apt_num: Optional[int]= None) -> AppointmentSyncLog:
         sync_log.sync_status = SyncStatus.PROCESSED
+        if operation is not None:
+            sync_log.operation = operation
         sync_log.reason = reason
+        sync_log.operation = operation
         sync_log.completed_at = datetime.now(timezone.utc)
         sync_log.appointment_id = appointment_id or sync_log.appointment_id
         sync_log.pat_id = pat_id or sync_log.pat_id
@@ -90,12 +99,13 @@ class AppointmentSyncLogService:
         self.db.refresh(sync_log)
         return sync_log 
     
-    def mark_failure(self, sync_log: AppointmentSyncLog, *,reason: str, should_retry: bool,) -> AppointmentSyncLog:
+    def mark_failure(self, sync_log: AppointmentSyncLog, *, reason: str, should_retry: bool, operation: str | None) -> AppointmentSyncLog:
         sync_log.sync_status = (
             SyncStatus.RETRYING if should_retry else SyncStatus.FAILED
         )
         sync_log.reason = reason
-
+        if operation is not None: 
+            sync_log.operation = operation 
         if not should_retry:
             sync_log.completed_at = datetime.now(timezone.utc)
 

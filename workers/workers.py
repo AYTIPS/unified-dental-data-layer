@@ -59,7 +59,7 @@ def _mark_event_retry_or_failure(db, current_job_id: str | None, job, error: Exc
         failure_reason=str(error),
     )
 
-def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService, sync_log: AppointmentSyncLog | None, job, error: Exception,) -> None:
+def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService, sync_log: AppointmentSyncLog | None, job, error: Exception, operation: str| None = None) -> None:
     if not sync_log:
         return
 
@@ -69,6 +69,7 @@ def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService,
         sync_log,
         reason=str(error),
         should_retry=should_retry,
+        operation= operation
     )
 
 
@@ -177,15 +178,16 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         })
 
         appointment_service = AppointmentService(db=db, od_client=od, clinic=clinic)
-        apt_num = await appointment_service.book(appointment_req)
+        booking = await appointment_service.book(appointment_req, sync_log_service=sync_log_service, sync_log=sync_log )
 
-        if not apt_num:
+        if not booking:
             logger.error("Appointment Failed to get Booked", extra={
                 "clinic": clinic.id,
                 "contact_ref": contact_ref,
             })
             raise ValueError("Appointment booking Failed ")
-
+        
+        apt_num = booking.apt_num
         logger.info("Appointment booked", extra={
             "clinic_id": clinic_id,
             "event_id": event_id,
@@ -198,7 +200,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         appointment_row = db.query(Appointments).filter_by(clinic_id = clinic_id, event_id= event_id).first()
         appointment_id = appointment_row.id if appointment_row else None
         if sync_log:
-            sync_log_service.mark_success(sync_log,reason="Created in OpenDental",appointment_id= appointment_id, pat_id=pat_id, apt_num=apt_num)
+            sync_log_service.mark_success(sync_log, reason="Created in opendental Successfully", operation= booking.action, appointment_id= appointment_id,  pat_id=pat_id, apt_num=apt_num)
             
     except circuit_breaker_open_error as e:
         db.rollback()

@@ -215,6 +215,7 @@ class AppointmentSyncLog(Base, Autoid):
     patient_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer,nullable=False,default=0,server_default="0",)
+    operation: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True),nullable=True)
