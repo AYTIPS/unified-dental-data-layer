@@ -16,6 +16,8 @@ def verify_webhook_secret_header (*, provided_secret: str| None, stored_secret_e
         raise HTTPException(status_code= status.HTTP_403_FORBIDDEN, detail= "Missing Weebhook secret")
     
     expected_secret = decode_secret(stored_secret_encrypted)
+    if expected_secret is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook secret could not be decoded")
 
     if not hmac.compare_digest(provided_secret.strip(), expected_secret):
         raise HTTPException(status_code= status.HTTP_403_FORBIDDEN, detail= "Invalid webhook secret")

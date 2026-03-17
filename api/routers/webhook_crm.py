@@ -9,6 +9,7 @@ from core.schemas import Webhook_requests, webhook_response
 from workers.workers import process_crm_load_job
 from infra.webhook_secret import WEBHOOK_SECRET_HEADER, verify_webhook_secret_header
 from infra.appointment_sync_log_helper import AppointmentSyncLogService, SyncLogInput
+from auth.security import encrypt_json_secret, encrypt_secret, hash_lookup
 import logging
 from uuid import UUID
 
@@ -46,7 +47,7 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
     patient_name = f"{payload_dict.get('first_name', '')} {payload_dict.get('last_name', '')}".strip() or None
 
     #idempotency to avoid duplicate 
-    redis_key = f"webhook processing: {event_id}:{contact_id}"
+    redis_key = f"webhook_processing:{event_id}:{hash_lookup(contact_id)}"
     if await async_redis.exists(redis_key):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail = "Dupliacte Webhook")
     else:
@@ -56,8 +57,8 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
     clinic_id=clinic.id,
     crm_type=crm_type,
     event_id=payload_dict.get("event_id"),
-    contact_id=payload_dict.get("contact_id"),
-    payload=payload_dict,
+    contact_id=encrypt_secret(contact_id),
+    payload=encrypt_json_secret(payload_dict),
     processing_status="received",
     )
 
@@ -96,8 +97,7 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
     event.processing_status = "queued"
     db.commit()
 
-    return {"status" : status.HTTP_200_OK ,
-            "payload": payload,
+    return {"status" : status.HTTP_202_ACCEPTED ,
             "job_id" : job.id,
             "message": "Webhook processed successfully",
             "clinic": clinic_id,

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from dataclasses import dataclass
 from typing import Any, Optional
+from auth.security import encrypt_json_secret, encrypt_secret, hash_lookup
 from core.models import AppointmentSyncLog, SyncDirection,SyncStatus
 import uuid
 
@@ -28,11 +29,12 @@ class AppointmentSyncLogService:
         self.db = db
 
     def build_change_key(self, data:SyncLogInput)-> str:
-        return (
+        raw_key = (
                 f"{data.clinic_id}|{data.contact_id}|{data.date_str}|"
                  f"{data.start_str}|{data.end_str}|"
         f"{data.appointment_status}|{data.direction.value}" 
         )
+        return hash_lookup(raw_key)
 
     
     def get_or_create_sync_log(self, data: SyncLogInput) -> AppointmentSyncLog:
@@ -45,16 +47,16 @@ class AppointmentSyncLogService:
                 inbound_event_id = data.inbound_event_id,
                 pat_id = data.pat_id,
                 appointment_id= data.appointment_id,
-                contact_id=data.contact_id,
+                contact_id=encrypt_secret(data.contact_id),
                 event_id=data.event_id,
                 apt_num=data.apt_num,
-                patient_name=data.patient_name,
+                patient_name=encrypt_secret(data.patient_name) if data.patient_name else None,
                 direction=data.direction,
                 appointment_status=data.appointment_status,
                 sync_status=SyncStatus.QUEUED,
                 change_key=change_key,
                 attempt_count=0,
-                payload=data.payload,
+                payload=encrypt_json_secret(data.payload),
                 reason=None,
                 completed_at=None,
             )

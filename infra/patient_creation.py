@@ -2,6 +2,7 @@ from sdk.opendental_sdk import openDentalApi
 from core.models import Patients
 from core.schemas import patient_model
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from auth.security import encrypt_secret, fingerprint_value, hash_lookup
 import logging
 from uuid import UUID
 
@@ -13,19 +14,20 @@ class PatientService():
         self.db = db 
         self.clinic_id = clinic_id
 
-
     async def reserve_patient(self, contact_id : str,   pat : patient_model ):
-        row = self.db.query(Patients).filter_by(contact_id = contact_id , clinic_id = self.clinic_id).first()
+        contact_hash = hash_lookup(contact_id)
+        row = self.db.query(Patients).filter_by(contact_id_hash=contact_hash, clinic_id=self.clinic_id).first()
         if row:
             return row 
         
         row = Patients(
-            contact_id = contact_id,
-            FName = pat.FName,
-            LName = pat.LName,
+            contact_id = encrypt_secret(contact_id),
+            contact_id_hash=contact_hash,
+            FName = encrypt_secret(pat.FName) if pat.FName else None,
+            LName = encrypt_secret(pat.LName) if pat.LName else None,
             Gender = pat.Gender,
-            phone = pat.WirelessPhone,         
-            email = pat.Email,
+            phone = encrypt_secret(pat.WirelessPhone) if pat.WirelessPhone else "",
+            email = encrypt_secret(str(pat.Email)) if pat.Email else None,
             clinic_id = self.clinic_id,
             pat_num = None
         )
@@ -40,7 +42,7 @@ class PatientService():
             self.db.rollback()
             row = (
                 self.db.query(Patients)
-                .filter_by(clinic_id=self.clinic_id, contact_id=contact_id)
+                .filter_by(clinic_id=self.clinic_id, contact_id_hash=contact_hash)
                 .first()
             ) 
             return row
@@ -83,7 +85,7 @@ class PatientService():
         except Exception as e :
             log.error("OD failed to search for patient", extra = {
                 "clinic" : self.clinic_id ,
-                "contact_id" : contact_id
+                "contact_ref" : fingerprint_value(contact_id)
 
             })
 
@@ -94,10 +96,16 @@ class PatientService():
             return  await self.finalize_into_db(row, pat_num)
                   
         try:
-            log.info(f"creating patient on od for contact_id{contact_id} in clinic {self.clinic_id}") 
+            log.info("Creating patient in OpenDental", extra={
+                "clinic_id": self.clinic_id,
+                "contact_ref": fingerprint_value(contact_id),
+            }) 
             created = await self.od.create_patient(patient_data = pat)
         except Exception as e : 
-            log.error(f"Failed to create patient in OD for {contact_id} in clinic {self.clinic_id}")
+            log.error("Failed to create patient in OpenDental", extra={
+                "clinic_id": self.clinic_id,
+                "contact_ref": fingerprint_value(contact_id),
+            })
             raise
 
         if created:

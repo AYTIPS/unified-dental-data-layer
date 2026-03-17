@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, func, ForeignKey, UniqueConstraint, Boolean, Enum, text
+from sqlalchemy import Column, String, Integer, DateTime, Text, func, ForeignKey, UniqueConstraint, Boolean, Enum, text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.dialects.postgresql import JSON, UUID
@@ -103,6 +103,7 @@ class Patients(Base, Autoid):
     email = Column(String, nullable=True)
     pat_num: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     contact_id = Column(String, nullable=False)
+    contact_id_hash = Column(String, nullable=True, index=True)
     clinic_id = Column(UUID(as_uuid=True), ForeignKey("registered_clinics.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     clinic = relationship("RegisteredClinics", back_populates="patients")
@@ -110,7 +111,7 @@ class Patients(Base, Autoid):
 
     __table_args__ = (
         UniqueConstraint("clinic_id", "pat_num", name="uq_clinic_patnum"),
-        UniqueConstraint("clinic_id", "contact_id", name="uq_clinic_contactid"),
+        UniqueConstraint("clinic_id", "contact_id_hash", name="uq_clinic_contactid_hash"),
     )
 
 
@@ -150,7 +151,7 @@ class InboundEvent(Base, Autoid):
     processing_status: Mapped[str] = mapped_column(String, nullable=False, default="received", server_default="received",)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0",)
     failure_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(),)
     processed_at: Mapped[Optional[datetime]] = mapped_column( DateTime(timezone=True), nullable=True,)
 
@@ -206,7 +207,7 @@ class AppointmentSyncLog(Base, Autoid):
     inbound_event_id : Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid= True), ForeignKey("inbound_events.id", ondelete= "SET NULL"), nullable=True)
     direction: Mapped[SyncDirection] = mapped_column(Enum(SyncDirection, name= "sync_direction_enum"), nullable= False)
     appointment_status: Mapped[str] = mapped_column(String, nullable=False)
-    sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, name="sync_status_enum"), nullable=False,default=SyncStatus.QUEUED, server_default=SyncStatus.QUEUED.value)
+    sync_status: Mapped[SyncStatus] = mapped_column(Enum(SyncStatus, name="sync_status_enum"), nullable=False,default=SyncStatus.QUEUED, server_default=SyncStatus.QUEUED.name)
     change_key: Mapped[str] = mapped_column(String, nullable=False)
     event_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     contact_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -214,7 +215,7 @@ class AppointmentSyncLog(Base, Autoid):
     patient_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer,nullable=False,default=0,server_default="0",)
-    payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),nullable=False,server_default=func.now())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True),nullable=True)
 

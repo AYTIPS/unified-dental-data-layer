@@ -6,6 +6,7 @@ from core.schemas import patient_model
 from infra.appointment_service import AppointmentService
 from infra.appointment_sync_log_helper import AppointmentSyncLogService
 from infra.patient_creation import PatientService
+from auth.security import fingerprint_value
 from core.schemas import AppointmentRequest
 from sqlalchemy.exc import SQLAlchemyError
 from core.circuti_breaker import circuit_breaker_open_error
@@ -72,7 +73,7 @@ def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService,
 
 
 
-def process_crm_load_job(clinic_id : UUID, crm_type: str, payload: dict,sync_log_id: UUID):
+def process_crm_load_job(clinic_id : UUID, crm_type: str, payload: dict, sync_log_id: UUID):
     return asyncio.run(process_crm_load(clinic_id, crm_type, payload, sync_log_id))
 
 
@@ -81,9 +82,11 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
     job = get_current_job()
     current_job_id = job.id if job else None 
 
-    sync_log = db.query(AppointmentSyncLog).filter_by(id = sync_log_id).first()
     sync_log_service= AppointmentSyncLogService(db)
     try:
+        sync_log = db.query(AppointmentSyncLog).filter_by(id = sync_log_id).first()
+        if not sync_log:
+            raise ValueError("Sync log not found for queued job")
         _mark_event_processing(db, current_job_id)
         if sync_log:
             sync_log_service.mark_processing(sync_log)
@@ -92,7 +95,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
             "clinic_id": clinic_id,
             "crm_type": crm_type,
             "event_id": payload.get("event_id"),
-            "contact_id": payload.get("contact_id"),
+            "contact_ref": fingerprint_value(payload.get("contact_id")),
         })
 
         clinic = db.query(RegisteredClinics).filter_by(id=clinic_id).first()
@@ -113,7 +116,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         logger.info("Patient payload mapped", extra={
             "clinic_id": clinic_id,
             "event_id": payload.get("event_id"),
-            "contact_id": payload.get("contact_id"),
+            "contact_ref": fingerprint_value(payload.get("contact_id")),
             "has_fname": bool(patient_data.FName),
             "has_lname": bool(patient_data.LName),
             "has_birthdate": bool(patient_data.Birthdate),
@@ -127,6 +130,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         calendar_id = payload.get("calendar_id", "")
         event_id = payload.get("event_id", "")
         contact_id = payload.get("contact_id", "")
+        contact_ref = fingerprint_value(contact_id)
         Note = payload.get("Notes", "")
         pop_up = payload.get("pop_up", "")
 
@@ -142,9 +146,8 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         logger.info("Resolved patient identifiers", extra={
             "clinic_id": clinic_id,
             "event_id": event_id,
-            "contact_id": contact_id,
-            "pat_id": pat_id,
-            "pat_num": pat_num,
+            "contact_ref": contact_ref,
+            "has_patient": True,
         })
 
         appointment_req = AppointmentRequest(
@@ -165,7 +168,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         logger.info("Appointment request prepared", extra={
             "clinic_id": clinic_id,
             "event_id": event_id,
-            "contact_id": contact_id,
+            "contact_ref": contact_ref,
             "calendar_id": calendar_id,
             "status": status,
             "date_str": date_str,
@@ -179,15 +182,14 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         if not apt_num:
             logger.error("Appointment Failed to get Booked", extra={
                 "clinic": clinic.id,
-                "pat_ num": pat_num,
-                "contact_id": contact_id,
+                "contact_ref": contact_ref,
             })
             raise ValueError("Appointment booking Failed ")
 
         logger.info("Appointment booked", extra={
             "clinic_id": clinic_id,
             "event_id": event_id,
-            "contact_id": contact_id,
+            "contact_ref": contact_ref,
             "apt_num": apt_num,
         })
 
@@ -206,7 +208,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
                 "clinic_id": clinic_id,
                 "crm_type": crm_type,
                 "event_id": payload.get("event_id"),
-                "contact_id": payload.get("contact_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
             },
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
@@ -222,7 +224,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
                 "clinic_id": clinic_id,
                 "crm_type": crm_type,
                 "event_id": payload.get("event_id"),
-                "contact_id": payload.get("contact_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
             },
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
@@ -238,7 +240,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
                 "clinic_id": clinic_id,
                 "crm_type": crm_type,
                 "event_id": payload.get("event_id"),
-                "contact_id": payload.get("contact_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
             },
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
