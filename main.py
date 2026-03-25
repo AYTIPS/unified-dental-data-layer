@@ -9,6 +9,7 @@ from api import invites
 import logging
 from api import workspace
 from api.synclog import sync_log_dso
+from api.synclog import sync_log_clinic
 
 
 log = logging.getLogger("uvicorn.error")
@@ -39,6 +40,7 @@ app.include_router(clinic_registration.router)
 app.include_router(invites.router)
 app.include_router(workspace.router)
 app.include_router(sync_log_dso.router)
+app.include_router(sync_log_clinic.router)
 
 
 

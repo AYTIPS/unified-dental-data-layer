@@ -457,7 +457,7 @@ def build_clinic_page_snapshot(
 
     )
 
-
+####dso level 
 def build_sync_log_detail(
         db:Session,
         *,

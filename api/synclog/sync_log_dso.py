@@ -73,7 +73,7 @@ async def stream_dso_sync_logs_page(
                     timeout=15.0
                     )
                 if message and message.get("type") =="message":
-                    yield f"event: sync_logs_chnaged\ndata:  {message['data']}\n\n"
+                    yield f"event: sync_logs_changed\ndata:  {message['data']}\n\n"
                 else:
                     yield ": Keep-alive\n\n"
 
