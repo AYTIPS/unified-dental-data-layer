@@ -161,6 +161,9 @@ def base_scope_query(db: Session, dso_id: UUID):
         .filter(RegisteredClinics.dso_id == dso_id)
     )
 
+def clinic_scope_query(db:Session, clinic_id: UUID):
+    return db.query(AppointmentSyncLog, RegisteredClinics).join(RegisteredClinics, AppointmentSyncLog.clinic_id == RegisteredClinics.id).filter(RegisteredClinics.id == clinic_id)
+
 
 def serialize_key(log: AppointmentSyncLog, clinic: RegisteredClinics) -> sync_log_row_out:
     raw_direction = _direction_value(log.direction)
@@ -185,7 +188,7 @@ def serialize_key(log: AppointmentSyncLog, clinic: RegisteredClinics) -> sync_lo
         attempt_count=log.attempt_count,
     )
 
-
+#DSO LEVEL 
 def build_summary(
     db: Session,
     dso_id: UUID,
@@ -224,6 +227,33 @@ def build_summary(
     )
 
 
+# CLINIC LEVEL 
+def build_clinic_level_summary(db: Session, clinic_id: UUID, date_from: date | None, date_to: date | None) -> sync_log_summary_out:
+
+    start_dt, end_dt = _resolve_date_window(date_from , date_to)
+
+    query = clinic_scope_query(db, clinic_id).filter(AppointmentSyncLog.started_at >= start_dt, AppointmentSyncLog.started_at < end_dt)
+
+    synced_today = query.filter(AppointmentSyncLog.sync_status == SyncStatus.PROCESSED).count()
+
+    in_progress = query.filter(AppointmentSyncLog.sync_status.in_([SyncStatus.QUEUED, SyncStatus.PROCESSING])).count()
+
+    needs_attention = query.filter(AppointmentSyncLog.sync_status == SyncStatus.RETRYING).count()
+
+    failed = query.filter(
+        AppointmentSyncLog.sync_status == SyncStatus.FAILED
+    ).count()
+
+    return sync_log_summary_out(
+        synced_today=synced_today,
+        in_progress=in_progress,
+        needs_attention=needs_attention,
+        failed=failed,
+    )
+
+
+
+#DSO LEVEL 
 def build_clinic_options(
     db: Session,
     dso_id: UUID,
@@ -241,6 +271,22 @@ def build_clinic_options(
     ]
 
 
+#clininc level 
+def build_single_clinic_option(db: Session, clinic_id: UUID) -> list[sync_log_clinic_option_out]:
+    clinic = db.query(RegisteredClinics).filter(RegisteredClinics.id == clinic_id).first()
+
+    if clinic is None :
+        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail= "Clinic not Found")
+
+    return [
+        sync_log_clinic_option_out(
+            id = clinic.id,
+            name= clinic.clinic_name
+        )
+    ]
+
+
+###DSO LEVEL
 def build_items(
     db: Session,
     *,
@@ -301,6 +347,50 @@ def build_items(
     return items, next_cursor
 
 
+##CLINIC LEVEL 
+def build_clinic_items(
+        db: Session,
+        *,
+        clinic_id: UUID,
+        status: SyncStatus | None,
+        limit: int,
+        date_from: date | None,
+        date_to: date | None,
+        cursor: str | None
+) -> tuple[list[sync_log_row_out], str | None]:
+
+    
+    start_dt, end_dt = _resolve_date_window(date_from, date_to)
+
+    query = clinic_scope_query(db, clinic_id).filter(AppointmentSyncLog.started_at >= start_dt,AppointmentSyncLog.started_at < end_dt )
+
+    if status is not None:
+        query = query.filter(AppointmentSyncLog.sync_status == status)
+    
+    if cursor:
+        cursor_started_at, cursor_id = _decode_cursor(cursor)
+        query = query.filter(or_(AppointmentSyncLog.started_at < cursor_started_at ), and_( AppointmentSyncLog.started_at == cursor_started_at, AppointmentSyncLog.id < cursor_id))
+
+
+    rows =cast(list[SyncLogQueryRow], query.order_by(AppointmentSyncLog.started_at.desc(), AppointmentSyncLog.id.desc()).limit(limit + 1).all() )
+
+
+    has_more =len(rows) > limit
+
+    if has_more:
+        rows = rows[:limit]
+
+    items = [serialize_key(log, clinic) for log, clinic in rows]
+
+    next_cursor: str | None = None
+    if has_more and rows:
+        last_log, last_clinic = rows[-1]
+        next_cursor = _encode_cursor(last_log.started_at, last_log.id)
+    
+    return items, cursor 
+
+    
+###DSO LEVEL
 def build_page_snapshot(
     db: Session,
     *,
@@ -338,6 +428,35 @@ def build_page_snapshot(
         next_cursor=next_cursor,
     )
 
+#####CLINIC LEVEL 
+def build_clinic_page_snapshot(
+        db: Session,
+        *,
+        clinic_id: UUID,
+        status: SyncStatus | None,
+        limit: int,
+        date_from: date | None,
+        date_to: date | None,
+        cursor: str | None
+
+) -> sync_log_page_out:
+    
+    items, next_cursor = build_clinic_items(
+        db, clinic_id = clinic_id, status=status, limit=limit, date_from = date_from, date_to = date_to, cursor=cursor 
+    )
+    
+    return sync_log_page_out(
+        generated_at = datetime.now(timezone.utc),
+        visible_count= len(items),
+        summary= build_clinic_level_summary(
+            db, clinic_id = clinic_id, date_from = date_from, date_to= date_to
+        ),
+        clinics = build_single_clinic_option(db, clinic_id),
+        items= items,
+        next_cursor=next_cursor
+
+    )
+
 
 def build_sync_log_detail(
         db:Session,
@@ -362,6 +481,36 @@ def build_sync_log_detail(
         pat_id = log.pat_id,
         appointment_status = log.appointment_status,
         payload = decode_json_secret(log.payload)
+    )
+
+
+def build_clinic_sync_log_detail(
+    db: Session,
+    *,
+    clinic_id: UUID,
+    sync_log_id: UUID,
+) -> sync_log_detail_out:
+    row = cast(
+        SyncLogQueryRow | None,
+        clinic_scope_query(db, clinic_id)
+        .filter(AppointmentSyncLog.id == sync_log_id)
+        .first(),
+    )
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Sync log not found")
+
+    log, clinic = row
+    base = serialize_key(log, clinic)
+
+    return sync_log_detail_out(
+        **base.model_dump(),
+        completed_at=log.completed_at,
+        appointment_id=log.appointment_id,
+        inbound_event_id=log.inbound_event_id,
+        pat_id=log.pat_id,
+        appointment_status=log.appointment_status,
+        payload=decode_json_secret(log.payload),
     )
 
     

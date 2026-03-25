@@ -14,6 +14,7 @@ def dso_sync_logs_channel(dso_id:UUID) -> str:
 def clinic_sync_logs_channel(clinic_id:UUID) -> str:
     return f"sync_logs:clinic:{clinic_id}"
 
+
 def publish_sync_log_changed(
         db:Session,
         *,

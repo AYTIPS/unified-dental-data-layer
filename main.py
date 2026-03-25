@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from core import database
-from api.routers import webhook_crm
+from api.routers import webhook_config, webhook_crm
 from core.middleware import RateLimitMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from auth import login, logout
@@ -8,6 +8,7 @@ from api.registration import user_registration, dso_registration, clinic_registr
 from api import invites
 import logging
 from api import workspace
+from api.synclog import sync_log_dso
 
 
 log = logging.getLogger("uvicorn.error")
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 app.add_middleware(RateLimitMiddleware)
 app.include_router(webhook_crm.router)
+app.include_router(webhook_config.router)
 app.include_router(login.router)
 app.include_router(logout.router)
 app.include_router(user_registration.router)
@@ -36,6 +38,7 @@ app.include_router(dso_registration.router)
 app.include_router(clinic_registration.router)
 app.include_router(invites.router)
 app.include_router(workspace.router)
+app.include_router(sync_log_dso.router)
 
 
 
