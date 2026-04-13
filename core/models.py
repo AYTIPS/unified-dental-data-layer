@@ -195,6 +195,23 @@ class RoleAssignment(Base, Autoid):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+    __table_args__ = (
+        Index(
+            "ix_role_assignments_user_scope_dso_active",
+            "user_id",
+            "scope_type",
+            "dso_id",
+            "is_active",
+        ),
+        Index(
+            "ix_role_assignments_user_scope_clinic_active",
+            "user_id",
+            "scope_type",
+            "clinic_id",
+            "is_active",
+        ),
+    )
+
 
 class MemberInvite(Base, Autoid):
     __tablename__ = "member_invites"
