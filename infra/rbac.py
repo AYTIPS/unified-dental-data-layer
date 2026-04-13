@@ -48,11 +48,9 @@ def require_clinic_access(db, user_id: UUID, clinic_id: UUID):
         })
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail= "Clinic Not Found")
 
-    # A DSO-level membership unlocks all clinics under that DSO.
-    if clinic.dso_id:
-        dso_role = get_dso_role(db, user_id, clinic.dso_id)
-        if dso_role:
-            return clinic
+    
+    if clinic.dso_id is  None and clinic.owner_id == user_id:
+        return clinic
 
     # A clinic-level membership unlocks only that clinic, even inside a DSO.
     clinic_role = get_clinic_role(db, user_id, clinic_id)
@@ -75,10 +73,8 @@ def require_clinic_manage(db, user_id: UUID, clinic_id: UUID):
         })
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Clinic Not Found")
 
-    if clinic.dso_id:
-        dso_role = get_dso_role(db, user_id, clinic.dso_id)
-        if dso_role and dso_role.role in {RoleType.ADMIN, RoleType.MANAGER}:
-            return clinic
+    if clinic.dso_id is not None and clinic.owner_id == user_id:
+        return clinic
 
     clinic_role = get_clinic_role(db, user_id, clinic_id)
     if clinic_role and clinic_role.role in {RoleType.ADMIN, RoleType.MANAGER}:

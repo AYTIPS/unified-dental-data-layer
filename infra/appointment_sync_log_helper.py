@@ -97,6 +97,8 @@ class AppointmentSyncLogService:
         self.publish_change(sync_log)
         return sync_log
     
+    
+    
     def mark_operation(self, sync_log: AppointmentSyncLog, *, operation: str) -> AppointmentSyncLog:
         sync_log.operation = operation
         self.db.commit()
@@ -121,6 +123,10 @@ class AppointmentSyncLogService:
         self.db.refresh(sync_log)
         self.publish_change(sync_log)
         return sync_log 
+    
+
+
+
     
     def mark_failure(self, sync_log: AppointmentSyncLog, *, reason: str, should_retry: bool, operation: str | None) -> AppointmentSyncLog:
         sync_log.sync_status = (

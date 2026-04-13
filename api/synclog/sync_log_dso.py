@@ -6,8 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from auth.oauth2 import get_current_user
-from auth.security import decode_json_secret
+from auth.oauth2 import get_current_user, get_current_user_for_stream
 from infra.sync_log_service import build_dso_page_snapshot_cached, build_sync_log_detail
 from core.database import get_db
 from core.models import  SyncStatus, Users
@@ -53,7 +52,7 @@ async def get_dso_syn_logs_page(
 async def stream_dso_sync_logs_page(
     dso_id: UUID,
     request: Request,
-    current_user: Users =Depends(get_current_user),
+    current_user: Users =Depends(get_current_user_for_stream),
     db: Session = Depends(get_db) 
 ):
     require_dso_access(db=db, user_id=current_user.id, dso_id = dso_id)

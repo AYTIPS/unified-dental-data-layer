@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from config import settings
 from core.models import Users
 from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException, status, Response
+from fastapi import Depends, HTTPException, status, Response, Request
 from core.database import get_db
 import logging
 import uuid
@@ -18,6 +18,8 @@ SECRET_KEY = settings.secret_key
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 ALGORITHM = settings.algorithm
 REFRESH_TOKEN_EXPIRE_DAYS = settings.refresh_token_expire_days
+STREAM_ACCESS_COOKIE_NAME = "stream_access_token"
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl= "/login")
 
 def hashpassword(password : str):
@@ -89,10 +91,31 @@ def  get_current_user(token: str = Depends(oauth2_scheme), db:Session = Depends(
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail = "Invalid Token")
     
+    if not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Account is deactivated")
+
     if user.token_version != token_version:
          raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail = "Invalid Token")
     
     return user
+
+
+def get_stream_token_from_request(request: Request)-> str | None:
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.lower().startswith("bearer"):
+        return auth_header.split(" ", 1)[1]
+    
+    return request.cookies.get(STREAM_ACCESS_COOKIE_NAME)
+
+
+def get_current_user_for_stream(request: Request, db:Session = Depends(get_db)):
+    token = get_stream_token_from_request(request)
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Missing stream token")
+    
+    return get_current_user(token, db)
+
+
 
 
 def validate_refresh_token(refresh_token: str , db: Session):
@@ -139,6 +162,23 @@ def set_refresh_cookie(response: Response, refresh_token: str):
         samesite="none",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path= "/login/refresh"
+    )
+
+def set_stream_access_cookie(response: Response, access_token: str ):
+    response.set_cookie(
+        key= STREAM_ACCESS_COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+
+def clear_stream_access_cookie(response: Response):
+    response.delete_cookie(
+        key=STREAM_ACCESS_COOKIE_NAME,
+        path="/",
     )
 
 

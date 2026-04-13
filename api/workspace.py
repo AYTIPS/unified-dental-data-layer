@@ -32,7 +32,7 @@ async def get_my_workspaces(current_user : Users = Depends(get_current_user), db
 
     clinic_rows = db.query(RoleAssignment, RegisteredClinics, Dso).join(RegisteredClinics, RoleAssignment.clinic_id == RegisteredClinics.id).outerjoin(Dso, RegisteredClinics.dso_id == Dso.id).filter(RoleAssignment.user_id == current_user.id, RoleAssignment.scope_type == ScopeType.CLINIC, RoleAssignment.is_active.is_(True)).all()
 
-    for assignment, clinic,dso in clinic_rows:
+    for assignment, clinic, dso in clinic_rows:
          workspace_map[("clinic", clinic.id)] = workspace_item(
             scope_type="clinic",
             role=assignment.role.value,

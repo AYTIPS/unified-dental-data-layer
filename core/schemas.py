@@ -294,3 +294,59 @@ class dso_clinic_summary_Out(BaseModel):
     needs_attention: int
     disabled_clinics: int
     synced_today: int
+
+class dso_clinic_row_out(BaseModel):
+    id:UUID
+    clinic_name:str
+    clinic_number: int
+    clinic_timezone:str
+    synced_today: int 
+    last_sync_at: Optional[datetime] = None
+    status: Literal["active", "needs_attention", "disabled"]
+    disabled_at: Optional[datetime] = None
+
+class dso_clinic_list_out(BaseModel):
+    generated_at:datetime
+    visible_count: int
+    summary: dso_clinic_summary_Out
+    items: List[dso_clinic_row_out]
+
+
+class dso_clinic_disabled_out(BaseModel):
+    id:UUID
+    clinic_name: str
+    status: Literal["disabled"]
+    disabled_at: datetime
+
+
+
+
+
+
+
+
+
+
+
+
+
+log.info(
+    "Clinic disabled by DSO user",
+    extra={
+        "dso_id": str(dso_id),
+        "clinic_id": str(clinic_id),
+        "disabled_by": str(disabled_by),
+    },
+)
+
+
+
+log.exception(
+    "Failed to disable clinic",
+    extra={
+        "dso_id": str(dso_id),
+        "clinic_id": str(clinic_id),
+        "disabled_by": str(disabled_by),
+    },
+)
+

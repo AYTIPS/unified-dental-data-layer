@@ -126,7 +126,7 @@ async def dso_clinic(dso_id : UUID , payload:cliniccreate, request: Request, db:
         "dso_id": dso_id,
         "request_id": request.state.request_id,
     })
-    existing = db.query(RegisteredClinics).filter(RegisteredClinics.owner_id == current_user.id, RegisteredClinics.dso_id == dso_id, RegisteredClinics.clinic_number == clinic_number ). first()
+    existing = db.query(RegisteredClinics).filter(RegisteredClinics.dso_id == dso_id, RegisteredClinics.clinic_number == clinic_number ). first()
 
     if existing:
         raise HTTPException(status_code = status.HTTP_400_BAD_REQUEST, detail = "Clinic already exist in DSO")
@@ -149,8 +149,21 @@ async def dso_clinic(dso_id : UUID , payload:cliniccreate, request: Request, db:
     
     try:
         db.add(clinic)
+        db.flush()
+
+        clinic_assignment = RoleAssignment(
+            user_id=current_user.id,
+            scope_type=ScopeType.CLINIC,
+            clinic_id=clinic.id,
+            role=RoleType.ADMIN,
+            created_by=current_user.id,
+            is_active=True,
+        )
+        db.add(clinic_assignment)
+
         db.commit()
         db.refresh(clinic)
+        
 
         log.info("Clinic  has been successfully created", extra ={ 
             "user_id" : current_user.id,

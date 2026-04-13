@@ -4,7 +4,7 @@ from  core.database import get_db
 from sqlalchemy.orm import Session
 from core.models import Users
 from core.schemas import loginresponse, loginrequest, refreshresponse
-from auth.oauth2 import create_access_token, create_refresh_token ,  verify_password, validate_refresh_token, set_refresh_cookie
+from auth.oauth2 import create_access_token, create_refresh_token ,  verify_password, validate_refresh_token, set_refresh_cookie, set_stream_access_cookie
 from auth.csrf_helper import verify_csrf, make_csrf_token, set_csrf_token
 from infra.login_helper import handle_failed_login, login_attempts, get_redis_attempts , MAX_LOGIN_ATTEMPTS, get_client_ip, clear_attempts_with_key
 import logging
@@ -37,11 +37,14 @@ async def login(payload: loginrequest, request: Request, response: Response, db:
         db.commit()
         access_token = create_access_token(user = user)
         refresh_token = create_refresh_token(user = user)
+        set_stream_access_cookie(response,access_token)
         set_refresh_cookie(response, refresh_token)
         csrf_token = make_csrf_token()
         set_csrf_token(response, csrf_token)
         return {
         "access_token" : access_token,
+        "csrf_token": csrf_token,
+
              }
     await handle_failed_login(key)
 
@@ -70,6 +73,10 @@ async def refresh_access_token(response: Response, request: Request, db:Session 
     new_access_token = create_access_token(user = user)
     new_refresh_token = create_refresh_token(user = user)
     set_refresh_cookie(response, new_refresh_token)
+    set_stream_access_cookie(response, new_access_token)
+    new_csrf_token = make_csrf_token()
+    set_csrf_token(response, new_csrf_token)
     return{
-        "access_token": new_access_token
+        "access_token": new_access_token,
+        "csrf_token": new_csrf_token,
     }

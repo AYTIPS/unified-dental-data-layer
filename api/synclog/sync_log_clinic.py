@@ -9,15 +9,14 @@ from fastapi.responses import StreamingResponse
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from auth.oauth2 import get_current_user
+from auth.oauth2 import get_current_user_for_stream,get_current_user
 from core.database import get_db
 from core.models import SyncStatus, Users
 from core.queue import async_redis
 from core.schemas import sync_log_detail_out, sync_log_page_out
-from infra.rbac import require_clinic_access, require_dso_access
-from infra.sync_log_events import clinic_sync_logs_channel, dso_sync_logs_channel
+from infra.rbac import require_clinic_access
+from infra.sync_log_events import clinic_sync_logs_channel
 from infra.sync_log_service import (
-    build_clinic_page_snapshot,
     build_clinic_sync_log_detail,
     build_clinic_page_snapshot_cached
 )
@@ -55,7 +54,7 @@ async def get_clinic_sync_logs_page(
 async def stream_clinic_sync_logs_events(
     clinic_id: UUID,
     request: Request,
-    current_user: Users = Depends(get_current_user),
+    current_user: Users = Depends(get_current_user_for_stream),
     db: Session = Depends(get_db),
 ):
     require_clinic_access(db=db, user_id=current_user.id, clinic_id=clinic_id)

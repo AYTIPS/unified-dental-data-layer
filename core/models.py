@@ -55,6 +55,17 @@ class Users(Base, Autoid):
     password = Column(String, nullable=False)
     token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     refresh_jti: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        index=True,
+    )
+    deactivated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     clinics = relationship("RegisteredClinics", back_populates="owner",foreign_keys="RegisteredClinics.owner_id", cascade="all, delete")
     dsos = relationship("Dso", back_populates="user", cascade="all, delete")
@@ -86,7 +97,7 @@ class RegisteredClinics(Base, Autoid):
     location_id: Mapped[str] = mapped_column(String, nullable=False)
     calendar_id: Mapped[str] = mapped_column(String, nullable=False)
     operatory_calendar_map: Mapped[Optional[dict[str, list[dict[str, Any]]]]] = mapped_column(JSON, nullable=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     dso_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("Dsos.id", ondelete="CASCADE"), nullable=True, index=True)
     is_disabled: Mapped[bool] = mapped_column(Boolean, nullable= False, default=False, server_default="false", index=True)    
     disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
