@@ -13,12 +13,15 @@ def value_part(value:object | None) -> str:
 def dso_clinic_list_cache_Key(
         *,
         dso_id: UUID,
+        user_id: UUID,
         search: str | None,
         status_filter: str | None,
         limit:int,
         offset: int
 )-> str:
     return (
+        f"dso_clinics:list:dso:{dso_id}:"
+        f"user:{user_id}:" 
         f"search:{value_part(search)}:"
         f"status:{value_part(status_filter)}:"
         f"limit:{limit}:"

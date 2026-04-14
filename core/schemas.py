@@ -225,6 +225,7 @@ class workspace_item(BaseModel):
     clinic_name: Optional[str] = None
 
 
+
 class workspace_ref(BaseModel):
     scope_type: Literal["dso", "clinic"]
     dso_id: Optional[UUID] = None
@@ -236,6 +237,7 @@ class my_workspaces_out(BaseModel):
     workspace_count: int
     workspaces: List[workspace_item]
     default_workspace: Optional[workspace_ref] = None
+    username: str 
 
 
 
@@ -310,7 +312,8 @@ class dso_clinic_row_out(BaseModel):
     clinic_timezone:str
     synced_today: int 
     last_sync_at: Optional[datetime] = None
-    status: Literal["active", "needs_attention", "disabled"]
+    status:  str 
+    needs_attention: bool
     attention_reason: Optional[str] = None
     actions: dso_clinic_actions_out
     disabled_at: Optional[datetime] = None

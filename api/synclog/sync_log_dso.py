@@ -3,12 +3,12 @@ import asyncio
 import inspect
 from datetime import  date
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from auth.oauth2 import get_current_user, get_current_user_for_stream
+from auth.oauth2 import get_current_user, get_stream_token_from_request
 from infra.sync_log_service import build_dso_page_snapshot_cached, build_sync_log_detail
-from core.database import get_db
+from core.database import SessionLocal, get_db
 from core.models import  SyncStatus, Users
 from core.schemas import (sync_log_page_out, sync_log_detail_out)
 from infra.rbac import require_dso_access
@@ -52,10 +52,23 @@ async def get_dso_syn_logs_page(
 async def stream_dso_sync_logs_page(
     dso_id: UUID,
     request: Request,
-    current_user: Users =Depends(get_current_user_for_stream),
-    db: Session = Depends(get_db) 
 ):
-    require_dso_access(db=db, user_id=current_user.id, dso_id = dso_id)
+    token = get_stream_token_from_request(request)
+    if not token:
+        logger.error("Invalid stream token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing stream token",
+        )
+
+    db = SessionLocal()
+    try:
+        user = get_current_user(token, db)
+        require_dso_access(db=db, user_id= user.id, dso_id = dso_id)
+
+    finally:
+        db.close()
+
     channel = dso_sync_logs_channel(dso_id)
 
     async def event_stream():

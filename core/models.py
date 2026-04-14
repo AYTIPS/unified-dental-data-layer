@@ -99,6 +99,15 @@ class RegisteredClinics(Base, Autoid):
     operatory_calendar_map: Mapped[Optional[dict[str, list[dict[str, Any]]]]] = mapped_column(JSON, nullable=True)
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     dso_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("Dsos.id", ondelete="CASCADE"), nullable=True, index=True)
+    last_webhook_auth_failed_at: Mapped[Optional[datetime]] = mapped_column(
+    DateTime(timezone=True),nullable=True)
+    webhook_auth_failure_count: Mapped[int] = mapped_column(Integer, nullable=False,default=0, server_default="0")
+    od_health_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    od_health_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    od_health_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    crm_health_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    crm_health_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    crm_health_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_disabled: Mapped[bool] = mapped_column(Boolean, nullable= False, default=False, server_default="false", index=True)    
     disabled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     disabled_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True),ForeignKey("users.id", ondelete="SET NULL"),nullable=True)
@@ -169,6 +178,15 @@ class InboundEvent(Base, Autoid):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(),)
     processed_at: Mapped[Optional[datetime]] = mapped_column( DateTime(timezone=True), nullable=True,)
+
+    __table_args__ = (
+    Index(
+        "ix_inbound_events_clinic_received_at",
+        "clinic_id",
+        "received_at",
+    ),
+)
+
 
 
 class Audit_logs(Base, Autoid):

@@ -8,6 +8,7 @@ from  auth.security import encrypt_secret
 from infra.rbac import require_dso_manage
 import logging
 import secrets
+from infra.dso_clinic_page_cache import invalidate_dso_clinic_list_cache
 from sqlalchemy.exc import SQLAlchemyError
 from core.schemas import clinicout
 from uuid import UUID
@@ -163,7 +164,7 @@ async def dso_clinic(dso_id : UUID , payload:cliniccreate, request: Request, db:
 
         db.commit()
         db.refresh(clinic)
-        
+        invalidate_dso_clinic_list_cache(dso_id=dso_id)
 
         log.info("Clinic  has been successfully created", extra ={ 
             "user_id" : current_user.id,

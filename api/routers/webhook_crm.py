@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from rq import Retry
 import logging
 from uuid import UUID
-
+from sqlalchemy.exc import SQLAlchemyError
+from infra.clinic_health import mark_webhook_auth_failed,reset_webhook_failure_after_success
 from auth.security import encrypt_json_secret, encrypt_secret, hash_lookup
+from infra.dso_clinic_page_cache import invalidate_dso_clinic_list_cache
 from core.database import get_db
 from core.models import RegisteredClinics, InboundEvent, SyncDirection
 from core.queue import async_redis, appointments_queue
@@ -33,8 +35,51 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="incorrect webhook url")
 
     provided_secret = request.headers.get(WEBHOOK_SECRET_HEADER)
-    verify_webhook_secret_header(provided_secret=provided_secret, stored_secret_encrypted=clinic.webhook_secret)
+    try:
+        verify_webhook_secret_header(
+            provided_secret=provided_secret, 
+            stored_secret_encrypted=clinic.webhook_secret
+            )
+    except HTTPException:
+        logger.warning(
+        "Webhook secret validation failed",
+        extra={
+            "clinic_id": str(clinic.id),
+            "crm_type": crm_type,
+        },
+    )
+        mark_webhook_auth_failed(clinic)
+        
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception(
+                "Failed to persist webhook auth failure state",
+                extra={
+                    "clinic_id": str(clinic.id),
+                    "crm_type": crm_type,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Unable to update webhook failure state",
+            )
+        if clinic.dso_id:
+            invalidate_dso_clinic_list_cache(dso_id=clinic.dso_id)
 
+        raise
+
+    logger.info(
+    "Webhook secret validation succeeded",
+    extra={
+        "clinic_id": str(clinic.id),
+        "crm_type": crm_type,
+    },
+        )
+
+    reset_webhook_failure_after_success(clinic)
+   
     payload_dict = payload.model_dump()
     event_id = payload_dict.get("event_id")
     contact_id = payload_dict.get("contact_id") or ""
@@ -59,8 +104,27 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
     )
 
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    try:
+        db.commit()
+        db.refresh(event)
+    
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception(
+            "Failed to persist inbound webhook event",
+            extra={
+                "clinic_id": str(clinic.id),
+                "crm_type": crm_type,
+                "event_id": event_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to persist inbound webhook event",
+        )
+    
+    if clinic.dso_id:
+        invalidate_dso_clinic_list_cache(dso_id=clinic.dso_id)
 
     sync_log_service = AppointmentSyncLogService(db)
     sync_input = SyncLogInput(

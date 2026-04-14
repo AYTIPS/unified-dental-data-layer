@@ -85,4 +85,5 @@ async def get_my_workspaces(current_user : Users = Depends(get_current_user), db
         "workspace_count": len(workspaces),
         "workspaces": workspaces,
         "default_workspace": default_workspace,
+        "username": current_user.username
     }

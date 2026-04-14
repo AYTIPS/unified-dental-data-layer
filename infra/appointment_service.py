@@ -1,11 +1,13 @@
-from sdk.opendental_sdk import openDentalApi
+from sdk.opendental_sdk import openDentalApi, OpenDentalAuthError
 from  sqlalchemy.orm  import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from core.models import Appointments, RegisteredClinics, AppointmentSyncLog
 from core.schemas import AppointmentRequest, Appointments_create, Appointments_update, create_commslogs, create_pop_ups
 from datetime import datetime, timezone
 from infra.operatory_cache import (get_operatory_day_appointments_cached, set_operatory_day_appointments_cached, invalidate_operatory_day_cache)
+from infra.dso_clinic_page_cache import invalidate_dso_clinic_list_cache
 from infra.appointment_sync_log_helper import AppointmentSyncLogService
+from infra.clinic_health import mark_od_auth_failed, mark_od_health_ok
 from dataclasses import dataclass 
 import logging 
 import asyncio
@@ -40,6 +42,40 @@ class AppointmentService():
 
     def _format_od_datetime(self, value: datetime) -> str:
         return value.strftime(fmt)
+    
+    async def _run_od_call(self, od_call, *, operation: str ):
+        try:
+            result = await od_call
+            mark_od_health_ok(self.clinic)
+            self.db.commit()
+            if self.clinic.dso_id:
+                invalidate_dso_clinic_list_cache(dso_id=self.clinic.dso_id)
+
+            logger.info(
+            "OpenDental operation succeeded",
+            extra={
+                "clinic_id": str(self.clinic.id),
+                "clinic_name": self.clinic.clinic_name,
+                "operation": operation,
+            },
+            )
+            return result
+        except OpenDentalAuthError as exc:
+            mark_od_auth_failed(self.clinic, reason=str(exc))
+            self.db.commit()
+            if self.clinic.dso_id:
+                invalidate_dso_clinic_list_cache(dso_id=self.clinic.dso_id)
+                
+            logger.warning(
+            "OpenDental auth failed",
+            extra={
+                "clinic_id": str(self.clinic.id),
+                "clinic_name": self.clinic.clinic_name,
+                "operation": operation,
+                "reason": str(exc),
+            },
+            )
+            raise
 
     
     async def get_operatory_appointments_cached(
@@ -60,11 +96,15 @@ class AppointmentService():
         if cached is not None:
             return cached 
         
-        appointments = await self.od.get_appointments_in_operatory(
-            operatory,
-            date_start,
-            date_end,
+        appointments = await self._run_od_call(
+            await self.od.get_appointments_in_operatory(
+                operatory,
+                date_start,
+                date_end,
+            ), 
+            operation= "get_operatory_appointments"
         )
+
 
         set_operatory_day_appointments_cached(
             clinic_id=self.clinic.id,
@@ -273,7 +313,10 @@ class AppointmentService():
             Note = req.Note,
             AptStatus = req.status
         )
-        return await  self.od.create_appointments( appointment_data = appointment)
+        return await self._run_od_call(
+            self.od.create_appointments(appointment_data=appointment), 
+            operation = "create_appointment"
+        )
     
     async def update_appointment(
         self,
@@ -290,7 +333,10 @@ class AppointmentService():
             AptStatus= req.status
         )
 
-        return  await self.od.update_appointment(Aptnum= AptNum, appointment_data = appointment)
+        return await self._run_od_call(
+        self.od.update_appointment(Aptnum=AptNum, appointment_data=appointment),
+        operation="update_appointment",
+        )
     
     async def handle_commslog(self, req : AppointmentRequest):
         if not req.commslog:
@@ -300,7 +346,10 @@ class AppointmentService():
             commlogs = req.commslog,
             PatNum = req.pat_Num 
         )
-        await self.od.create_commslog(comms_logs = logs )
+        await self._run_od_call(
+            self.od.create_commslog(comms_logs=logs),
+            operation = "create_commslog"
+        )
     
 
     
@@ -313,7 +362,10 @@ class AppointmentService():
             PatNum = req.pat_Num
         )
 
-        await self.od.create_pops(pops = pops )
+        await self._run_od_call(
+            self.od.create_pops(pops=pops),
+            operation = "create_pop_ups"
+        )
 
 
     async def get_operatories(self, req: AppointmentRequest) -> list[int]:

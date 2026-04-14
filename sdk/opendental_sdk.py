@@ -8,7 +8,8 @@ from core.schemas import patient_model, Appointments_create, Appointments_update
 import  json
 from uuid import UUID
 
-
+class OpenDentalAuthError(Exception):
+    pass
 
 class openDentalApi:
     cb = circuit_breaker(max_failures=5, reset_timeout=30)
@@ -29,7 +30,6 @@ class openDentalApi:
             "Content-Type": "application/json"
         }
 
-    
     async def _request(self, method:str , endpoint:str, **kwargs):
         url = f"{self.base_url}{endpoint}"
         if not self.cb.allow_request():

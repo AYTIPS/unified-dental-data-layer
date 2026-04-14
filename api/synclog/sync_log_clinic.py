@@ -1,16 +1,15 @@
 import asyncio
 import inspect
-import json
+import logging
 from datetime import date
 from uuid import UUID
-
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from fastapi.responses import StreamingResponse
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from auth.oauth2 import get_current_user_for_stream,get_current_user
-from core.database import get_db
+from auth.oauth2 import get_current_user, get_stream_token_from_request
+from core.database import get_db, SessionLocal
 from core.models import SyncStatus, Users
 from core.queue import async_redis
 from core.schemas import sync_log_detail_out, sync_log_page_out
@@ -23,6 +22,8 @@ from infra.sync_log_service import (
 
 
 router = APIRouter(prefix = "/clinics",  tags= ["Sync Logs"])
+
+logger= logging.getLogger(__name__)
 
 @router.get("/{clinic_id}/sync-logs", response_model=sync_log_page_out)
 async def get_clinic_sync_logs_page(
@@ -54,10 +55,24 @@ async def get_clinic_sync_logs_page(
 async def stream_clinic_sync_logs_events(
     clinic_id: UUID,
     request: Request,
-    current_user: Users = Depends(get_current_user_for_stream),
-    db: Session = Depends(get_db),
 ):
-    require_clinic_access(db=db, user_id=current_user.id, clinic_id=clinic_id)
+    
+
+    token = get_stream_token_from_request(request)
+    if not token:
+        logger.error("invalid streaming token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing stream token",
+        )
+    db = SessionLocal()
+    try:
+        user = get_current_user(token,db)
+        require_clinic_access(db=db, user_id=user.id, clinic_id=clinic_id)
+
+    finally:
+        db.close()
+
     channel = clinic_sync_logs_channel(clinic_id)
 
     async def event_stream():
