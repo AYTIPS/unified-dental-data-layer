@@ -10,6 +10,7 @@ from api.registration import user_registration, dso_registration, clinic_registr
 from api.routers import invites
 import logging
 from api.routers import workspace
+from api.routers import team_members
 from api.routers.synclog import sync_log_dso
 from api.routers.synclog import sync_log_clinic
 
@@ -41,6 +42,7 @@ app.include_router(dso_registration.router)
 app.include_router(clinic_registration.router)
 app.include_router(invites.router)
 app.include_router(workspace.router)
+app.include_router(team_members.router)
 app.include_router(sync_log_dso.router)
 app.include_router(dso_clinic_page.router)
 app.include_router(sync_log_clinic.router)
