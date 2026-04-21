@@ -7,11 +7,13 @@ from core.database import get_db
 from core.models import Users, MemberInvite, RoleAssignment, ScopeType, RoleType
 from core.schemas import create_dso_invite_request, create_clinic_invite_request, accept_invite_request, invite_out
 from infra.rbac import require_dso_manage, require_clinic_manage, get_dso_role, get_clinic_role
+from caches.team_member_cache import invalidate_clinic_team_members_cache, invalidate_dso_team_members_cache
 from config import settings
 import hashlib
 import secrets
 import logging
 from uuid import UUID
+from typing import cast
 
 logger = logging.getLogger()
 router = APIRouter(
@@ -212,6 +214,12 @@ async def accept_invite(
         db.add(assignment)
         invite.accepted_at = now
         db.commit()
+        if invite.scope_type == ScopeType.DSO and invite.dso_id is not None:
+            invalidate_dso_team_members_cache(dso_id=cast(UUID, invite.dso_id))
+
+        if invite.scope_type == ScopeType.CLINIC and invite.clinic_id is not None:
+            invalidate_clinic_team_members_cache(clinic_id=cast(UUID, invite.clinic_id))
+
     except SQLAlchemyError:
         logger.exception(
         "Invite accept failed: database error",
