@@ -5,7 +5,7 @@ from typing import Literal, TypeAlias, cast
 from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from auth.security import decode_secret, decode_json_secret
 from core.models import AppointmentSyncLog, RegisteredClinics, SyncStatus
 from core.schemas import (sync_log_clinic_option_out, sync_log_page_out, sync_log_row_out,
@@ -182,11 +182,17 @@ def base_scope_query(db: Session, dso_id: UUID):
     return (
         db.query(AppointmentSyncLog, RegisteredClinics)
         .join(RegisteredClinics, AppointmentSyncLog.clinic_id == RegisteredClinics.id)
+        .options(load_only(RegisteredClinics.id, RegisteredClinics.clinic_name))
         .filter(RegisteredClinics.dso_id == dso_id)
     )
 
 def clinic_scope_query(db:Session, clinic_id: UUID):
-    return db.query(AppointmentSyncLog, RegisteredClinics).join(RegisteredClinics, AppointmentSyncLog.clinic_id == RegisteredClinics.id).filter(RegisteredClinics.id == clinic_id)
+    return (
+        db.query(AppointmentSyncLog, RegisteredClinics)
+        .join(RegisteredClinics, AppointmentSyncLog.clinic_id == RegisteredClinics.id)
+        .options(load_only(RegisteredClinics.id, RegisteredClinics.clinic_name))
+        .filter(RegisteredClinics.id == clinic_id)
+    )
 
 
 def serialize_key(log: AppointmentSyncLog, clinic: RegisteredClinics) -> sync_log_row_out:
@@ -374,11 +380,15 @@ def build_clinic_options(
     db: Session,
     dso_id: UUID,
 ) -> list[sync_log_clinic_option_out]:
-    clinics = (
-        db.query(RegisteredClinics)
-        .filter(RegisteredClinics.dso_id == dso_id)
-        .order_by(RegisteredClinics.clinic_name.asc())
-        .all()
+    clinics = cast(
+        list[RegisteredClinics],
+        (
+            db.query(RegisteredClinics)
+            .options(load_only(RegisteredClinics.id, RegisteredClinics.clinic_name))
+            .filter_by(dso_id=dso_id)
+            .order_by(RegisteredClinics.clinic_name.asc())
+            .all()
+        ),
     )
 
     return [
@@ -389,7 +399,13 @@ def build_clinic_options(
 
 #clininc level 
 def build_single_clinic_option(db: Session, clinic_id: UUID) -> list[sync_log_clinic_option_out]:
-    clinic = db.query(RegisteredClinics).filter(RegisteredClinics.id == clinic_id).first()
+    clinic = cast(
+        RegisteredClinics | None,
+        db.query(RegisteredClinics)
+        .options(load_only(RegisteredClinics.id, RegisteredClinics.clinic_name))
+        .filter_by(id=clinic_id)
+        .first(),
+    )
 
     if clinic is None :
         raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail= "Clinic not Found")
@@ -575,7 +591,7 @@ def build_clinic_items(
 
     next_cursor: str | None = None
     if has_more and rows:
-        last_log, last_clinic = rows[-1]
+        last_log, _last_clinic = rows[-1]
         next_cursor = _encode_cursor(last_log.started_at, last_log.id)
     
     return items, next_cursor 
@@ -855,4 +871,3 @@ def build_clinic_sync_log_detail(
     )
 
     
-

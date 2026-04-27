@@ -103,13 +103,14 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         processing_status="received",
     )
 
-    db.add(event)
     try:
+        db.add(event)
         db.commit()
         db.refresh(event)
     
     except SQLAlchemyError:
         db.rollback()
+        await async_redis.delete(redis_key)
         logger.exception(
             "Failed to persist inbound webhook event",
             extra={
@@ -150,18 +151,37 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         max=3,
         interval=[60, 120, 300]
     )
-    job = appointments_queue.enqueue(
-        process_crm_load_job,
-        clinic_id,
-        crm_type,
-        payload_dict,
-        sync_log.id,
-        retry=retry_cfg,
+
+    try:
+        job = appointments_queue.enqueue(
+            process_crm_load_job,
+            clinic_id,
+            crm_type,
+            payload_dict,
+            sync_log.id,
+            retry=retry_cfg,
+        )
+        event.job_id = job.id
+        event.processing_status = "queued"
+        db.commit()
+    except Exception:
+        db.rollback()
+        await async_redis.delete(redis_key)
+        logger.exception(
+        "Failed to enqueue webhook job",
+        extra={
+            "clinic_id": str(clinic.id),
+            "crm_type": crm_type,
+            "event_id": event_id,
+        },
+        )
+
+        raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Unable to queue webhook job",
     )
 
-    event.job_id = job.id
-    event.processing_status = "queued"
-    db.commit()
+
 
     return {
         "status": status.HTTP_202_ACCEPTED,
