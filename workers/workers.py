@@ -1,9 +1,9 @@
 from core.database import SessionLocal
-from core.models import Patients, RegisteredClinics, InboundEvent, AppointmentSyncLog,Appointments
+from core.models import Patients, RegisteredClinics, InboundEvent, AppointmentSyncLog,Appointments, SyncFailureSource
 from sdk.opendental_sdk import openDentalApi
 from fastapi import HTTPException
 from core.schemas import patient_model
-from infra.appointment_service import AppointmentService
+from infra.appointment_service import AppointmentService,  CustomerConfigurationSyncError, OpenDentalSyncError, InternalSyncError
 from infra.appointment_sync_log_helper import AppointmentSyncLogService
 from infra.patient_creation import PatientService
 from auth.security import fingerprint_value
@@ -59,7 +59,7 @@ def _mark_event_retry_or_failure(db, current_job_id: str | None, job, error: Exc
         failure_reason=str(error),
     )
 
-def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService, sync_log: AppointmentSyncLog | None, job, error: Exception, operation: str| None = None) -> None:
+def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService, sync_log: AppointmentSyncLog | None, job, error: Exception, *, failure_source: SyncFailureSource, operation: str| None = None) -> None:
     if not sync_log:
         return
 
@@ -69,7 +69,8 @@ def _mark_sync_log_retry_or_failure(sync_log_service: AppointmentSyncLogService,
         sync_log,
         reason=str(error),
         should_retry=should_retry,
-        operation= operation
+        operation= operation,
+        failure_source = failure_source
     )
 
 
@@ -202,6 +203,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         if sync_log:
             sync_log_service.mark_success(sync_log, reason="Created in opendental Successfully", operation= booking.action, appointment_id= appointment_id,  pat_id=pat_id, apt_num=apt_num)
             
+
     except circuit_breaker_open_error as e:
         db.rollback()
         logger.warning(
@@ -215,8 +217,76 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
         sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
-        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e)
+        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e, failure_source = SyncFailureSource.OPEN_DENTAL )
         raise ValueError("Opendental is down please try again later")
+
+
+    except CustomerConfigurationSyncError as e:
+        db.rollback()
+        logger.warning(
+            "Customer configuration caused sync failure",
+            extra={
+                "clinic_id": clinic_id,
+                "crm_type": crm_type,
+                "event_id": payload.get("event_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
+            },
+        )
+        _mark_event_result(db, current_job_id, job, status="failed", failure_reason=str(e))
+        sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
+        if sync_log:
+            sync_log_service.mark_failure(
+                sync_log,
+                reason=str(e),
+                should_retry=False,
+                operation=None,
+                failure_source=SyncFailureSource.CUSTOMER_CONFIGURATION,
+            )
+        raise
+
+    except OpenDentalSyncError as e:
+        db.rollback()
+        logger.warning(
+            "OpenDental caused sync failure",
+            extra={
+                "clinic_id": clinic_id,
+                "crm_type": crm_type,
+                "event_id": payload.get("event_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
+            },
+        )
+        _mark_event_retry_or_failure(db, current_job_id, job, e)
+        sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
+        _mark_sync_log_retry_or_failure(
+            sync_log_service,
+            sync_log,
+            job,
+            e,
+            failure_source=SyncFailureSource.OPEN_DENTAL,
+        )
+        raise
+
+    except InternalSyncError as e:
+        db.rollback()
+        logger.exception(
+            "Internal sync processing failure",
+            extra={
+                "clinic_id": clinic_id,
+                "crm_type": crm_type,
+                "event_id": payload.get("event_id"),
+                "contact_ref": fingerprint_value(payload.get("contact_id")),
+            },
+        )
+        _mark_event_retry_or_failure(db, current_job_id, job, e)
+        sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
+        _mark_sync_log_retry_or_failure(
+            sync_log_service,
+            sync_log,
+            job,
+            e,
+            failure_source=SyncFailureSource.INTERNAL,
+        )
+        raise
 
     except SQLAlchemyError as e:
         db.rollback()
@@ -231,7 +301,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
         sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
-        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e)
+        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e, failure_source= SyncFailureSource.INTERNAL)
         raise HTTPException(status_code=500, detail="Database error occurred")
 
     except Exception as e:
@@ -247,7 +317,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
         )
         _mark_event_retry_or_failure(db, current_job_id, job, e)
         sync_log = db.query(AppointmentSyncLog).filter_by(id=sync_log_id).first()
-        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e)
+        _mark_sync_log_retry_or_failure(sync_log_service, sync_log, job, e, failure_source= SyncFailureSource.UNKNOWN)
         raise
 
     finally:

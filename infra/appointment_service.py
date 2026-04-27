@@ -16,6 +16,19 @@ from core.utils import check_time_slot, fmt, opendental_get_operatory_status, op
 
 logger = logging.getLogger(__name__)
 
+
+class CustomerConfigurationSyncError(Exception):
+    pass
+
+
+class OpenDentalSyncError(Exception):
+    pass
+
+
+class InternalSyncError(Exception):
+    pass
+
+
 BookingAction = Literal["created", "updated", "unchanged", "create", "update", "unchanged"]
 
 @dataclass
@@ -46,23 +59,11 @@ class AppointmentService():
     async def _run_od_call(self, od_call, *, operation: str ):
         try:
             result = await od_call
-            mark_od_health_ok(self.clinic)
-            self.db.commit()
-            if self.clinic.dso_id:
-                invalidate_dso_clinic_list_cache(dso_id=self.clinic.dso_id)
-
-            logger.info(
-            "OpenDental operation succeeded",
-            extra={
-                "clinic_id": str(self.clinic.id),
-                "clinic_name": self.clinic.clinic_name,
-                "operation": operation,
-            },
-            )
-            return result
+           
         except OpenDentalAuthError as exc:
             mark_od_auth_failed(self.clinic, reason=str(exc))
             self.db.commit()
+
             if self.clinic.dso_id:
                 invalidate_dso_clinic_list_cache(dso_id=self.clinic.dso_id)
                 
@@ -75,7 +76,46 @@ class AppointmentService():
                 "reason": str(exc),
             },
             )
-            raise
+            raise CustomerConfigurationSyncError("Open dental credentials are invalid") from exc 
+        
+        except (TimeoutError, ConnectionError) as exc:
+            logger.warning(
+            "OpenDental connection failure",
+            extra={
+                "clinic_id": str(self.clinic.id),
+                "clinic_name": self.clinic.clinic_name,
+                "operation": operation,
+                "reason": str(exc),
+            },
+        )
+            raise OpenDentalSyncError("Open Dental is unavailable") from exc
+        
+        except Exception as exc:
+            logger.exception(
+            "Unexpected OpenDental processing error",
+            extra={
+                "clinic_id": str(self.clinic.id),
+                "clinic_name": self.clinic.clinic_name,
+                "operation": operation,
+            },
+        )
+            raise InternalSyncError("Internal processing error") from exc
+            
+        mark_od_health_ok(self.clinic)
+        self.db.commit
+
+        if self.clinic.dso_id:
+            invalidate_dso_clinic_list_cache(dso_id=self.clinic.dso_id)
+
+        logger.info(
+        "OpenDental operation succeeded",
+        extra={
+            "clinic_id": str(self.clinic.id),
+            "clinic_name": self.clinic.clinic_name,
+            "operation": operation,
+        },
+        )
+        return result
 
     
     async def get_operatory_appointments_cached(

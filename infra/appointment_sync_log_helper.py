@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from dataclasses import dataclass
 from typing import Any, Optional
 from auth.security import encrypt_json_secret, encrypt_secret, hash_lookup
-from core.models import AppointmentSyncLog, SyncDirection,SyncStatus
+from core.models import AppointmentSyncLog, SyncDirection,SyncStatus, SyncFailureSource
 from infra.sync_log_events import publish_sync_log_changed
 import uuid
 
@@ -118,7 +118,10 @@ class AppointmentSyncLogService:
         sync_log.appointment_id = appointment_id or sync_log.appointment_id
         sync_log.pat_id = pat_id or sync_log.pat_id
         sync_log.apt_num = apt_num or sync_log.apt_num
-
+        sync_log.failure_source = SyncFailureSource.NONE
+        sync_log.counts_toward_usage = True
+        sync_log.is_billable = True
+        
         self.db.commit()
         self.db.refresh(sync_log)
         self.publish_change(sync_log)
@@ -128,11 +131,20 @@ class AppointmentSyncLogService:
 
 
     
-    def mark_failure(self, sync_log: AppointmentSyncLog, *, reason: str, should_retry: bool, operation: str | None) -> AppointmentSyncLog:
+    def mark_failure(self, sync_log: AppointmentSyncLog, *, reason: str, should_retry: bool, operation: str | None, failure_source: SyncFailureSource) -> AppointmentSyncLog:
         sync_log.sync_status = (
             SyncStatus.RETRYING if should_retry else SyncStatus.FAILED
         )
         sync_log.reason = reason
+        sync_log.failure_source = failure_source
+
+        if failure_source == SyncFailureSource.CUSTOMER_CONFIGURATION:
+            sync_log.counts_toward_usage = True
+            sync_log.is_billable = True
+        else:
+            sync_log.counts_toward_usage = False
+            sync_log.is_billable = False
+
         if operation is not None: 
             sync_log.operation = operation 
         if not should_retry:

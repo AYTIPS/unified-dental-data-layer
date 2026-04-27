@@ -14,7 +14,7 @@ router= APIRouter(
     )
 
 @router.get("/{clinic_id}/webhook-config", response_model= webhook_config_out)
-async def get_clinic_webhook_config(clinic_id: UUID, current_user: Users = Depends(get_db), db: Session = Depends(get_db)):
+async def get_clinic_webhook_config(clinic_id: UUID, current_user: Users = Depends(get_current_user), db: Session = Depends(get_db)):
     clinic = require_clinic_manage(db=db, user_id = current_user.id, clinic_id= clinic_id)
     header_value = decode_secret(clinic.webhook_secret)
     if header_value is None:
