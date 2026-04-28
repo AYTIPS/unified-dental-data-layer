@@ -520,7 +520,7 @@ def build_dso_items_cached(
                 "limit": limit,
                 "date_from": str(date_from) if date_from else None,
                 "date_to": str(date_to) if date_to else None,
-                "cursor": cursor,
+                "cursor": cursor,\
             },
         )
         items = [sync_log_row_out(**item) for item in cached["items"]]

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Request, HTTPException, status, Depends
-from sqlalchemy.orm import Session
-from rq import Retry
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from rq import Retry
 from sqlalchemy.exc import SQLAlchemyError
-from infra.clinic_health import mark_webhook_auth_failed,reset_webhook_failure_after_success
+from sqlalchemy.orm import Session
+
 from auth.security import encrypt_json_secret, encrypt_secret, hash_lookup
 from caches.dso_clinic_page_cache import invalidate_dso_clinic_list_cache
 from core.database import get_db
@@ -12,6 +13,7 @@ from core.models import RegisteredClinics, InboundEvent, SyncDirection
 from core.queue import async_redis, appointments_queue
 from core.schemas import Webhook_requests, webhook_response
 from infra.appointment_sync_log_helper import AppointmentSyncLogService, SyncLogInput
+from infra.clinic_health import mark_webhook_auth_failed, reset_webhook_failure_after_success
 from infra.webhook_secret import WEBHOOK_SECRET_HEADER, verify_webhook_secret_header
 from workers.workers import process_crm_load_job
 
@@ -24,7 +26,13 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/{crm_type}/{clinic_id}", status_code=202, response_model=webhook_response)
-async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: Webhook_requests, db: Session = Depends(get_db)):
+async def webhooks(
+    crm_type: str,
+    clinic_id: UUID,
+    request: Request,
+    payload: Webhook_requests,
+    db: Session = Depends(get_db),
+):
     logger.info(f"webhook received for clinic  {clinic_id}")
     clinic = db.query(RegisteredClinics).filter_by(id=clinic_id).first()
     if not clinic:
@@ -71,15 +79,15 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         raise
 
     logger.info(
-    "Webhook secret validation succeeded",
-    extra={
-        "clinic_id": str(clinic.id),
-        "crm_type": crm_type,
-    },
-        )
+        "Webhook secret validation succeeded",
+        extra={
+            "clinic_id": str(clinic.id),
+            "crm_type": crm_type,
+        },
+    )
 
     reset_webhook_failure_after_success(clinic)
-   
+
     payload_dict = payload.model_dump()
     event_id = payload_dict.get("event_id")
     contact_id = payload_dict.get("contact_id") or ""
@@ -90,9 +98,9 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
     patient_name = f"{payload_dict.get('first_name', '')} {payload_dict.get('last_name', '')}".strip() or None
 
     redis_key = f"webhook_processing:{event_id}:{hash_lookup(contact_id)}"
-    if await async_redis.exists(redis_key):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dupliacte Webhook")
-    await async_redis.setex(redis_key, 300, "processing")
+    claimed = await async_redis.set(redis_key, "processing", ex=300, nx=True)
+    if not claimed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Duplicate Webhook")
 
     event = InboundEvent(
         clinic_id=clinic.id,
@@ -107,7 +115,6 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         db.add(event)
         db.commit()
         db.refresh(event)
-    
     except SQLAlchemyError:
         db.rollback()
         await async_redis.delete(redis_key)
@@ -145,12 +152,64 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         payload=payload_dict,
     )
 
-    sync_log = sync_log_service.get_or_create_sync_log(sync_input)
+    try:
+        sync_log = sync_log_service.get_or_create_sync_log(sync_input)
+    except Exception as exc:
+        db.rollback()
+        event.processing_status = "failed"
+        event.failure_reason = str(exc)
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception(
+                "Failed to persist sync log creation failure on inbound event",
+                extra={
+                    "clinic_id": str(clinic.id),
+                    "crm_type": crm_type,
+                    "event_id": event_id,
+                },
+            )
+        await async_redis.delete(redis_key)
+        logger.exception(
+            "Failed to create sync log for inbound webhook event",
+            extra={
+                "clinic_id": str(clinic.id),
+                "crm_type": crm_type,
+                "event_id": event_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to create sync log",
+        ) from exc
 
     retry_cfg = Retry(
         max=3,
         interval=[60, 120, 300]
     )
+    job_id = str(uuid4())
+
+    try:
+        event.job_id = job_id
+        event.failure_reason = None
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        await async_redis.delete(redis_key)
+        logger.exception(
+            "Failed to persist webhook job identifier",
+            extra={
+                "clinic_id": str(clinic.id),
+                "crm_type": crm_type,
+                "event_id": event_id,
+                "job_id": job_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to persist webhook job identifier",
+        )
 
     try:
         job = appointments_queue.enqueue(
@@ -159,29 +218,54 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
             crm_type,
             payload_dict,
             sync_log.id,
+            job_id=job_id,
             retry=retry_cfg,
         )
-        event.job_id = job.id
+    except Exception as exc:
+        await async_redis.delete(redis_key)
+        event.processing_status = "enqueue_failed"
+        event.failure_reason = str(exc)
+        try:
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception(
+                "Failed to persist enqueue failure state",
+                extra={
+                    "clinic_id": str(clinic.id),
+                    "crm_type": crm_type,
+                    "event_id": event_id,
+                    "job_id": job_id,
+                },
+            )
+        logger.exception(
+            "Failed to enqueue webhook job",
+            extra={
+                "clinic_id": str(clinic.id),
+                "crm_type": crm_type,
+                "event_id": event_id,
+                "job_id": job_id,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to queue webhook job",
+        ) from exc
+
+    try:
         event.processing_status = "queued"
         db.commit()
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
-        await async_redis.delete(redis_key)
         logger.exception(
-        "Failed to enqueue webhook job",
-        extra={
-            "clinic_id": str(clinic.id),
-            "crm_type": crm_type,
-            "event_id": event_id,
-        },
+            "Webhook job queued but queued status could not be persisted",
+            extra={
+                "clinic_id": str(clinic.id),
+                "crm_type": crm_type,
+                "event_id": event_id,
+                "job_id": job_id,
+            },
         )
-
-        raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Unable to queue webhook job",
-    )
-
-
 
     return {
         "status": status.HTTP_202_ACCEPTED,
@@ -189,4 +273,4 @@ async def webhooks(crm_type: str, clinic_id: UUID, request: Request, payload: We
         "message": "Webhook processed successfully",
         "clinic": clinic_id,
         "crm_type": crm_type,
-    } 
+    }
