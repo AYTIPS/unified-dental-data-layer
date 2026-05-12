@@ -15,7 +15,7 @@ def reset_webhook_failure_after_success(clinic:RegisteredClinics):
     clinic.last_webhook_auth_failed_at = None
 
 def mark_od_auth_failed(clinic: RegisteredClinics, *, reason: str)-> None:
-    clinic.od_health_status ="auth_faailed"
+    clinic.od_health_status ="auth_failed"
     clinic.od_health_reason = reason
     clinic.od_health_changed_at = now()
 

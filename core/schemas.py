@@ -356,6 +356,21 @@ class team_member_list_out(BaseModel):
 
 
 
+######Wallet creation 
+class toroforge_wallet_create_request(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+
+
+class toroforge_wallet_create_response(BaseModel):
+    wallet_id: UUID
+    scope_type: Literal["clinic", "dso"]
+    clinic_id: Optional[UUID] = None
+    dso_id: Optional[UUID] = None
+    external_wallet_address: str
+    external_wallet_username: str
+    generated_password: str
+
+
 
 
 

@@ -9,7 +9,7 @@ from infra.patient_creation import PatientService
 from auth.security import fingerprint_value
 from core.schemas import AppointmentRequest
 from sqlalchemy.exc import SQLAlchemyError
-from core.circuti_breaker import circuit_breaker_open_error
+from core.circuti_breaker import CircuitBreakerOpenError
 from rq import get_current_job
 from datetime import datetime, timezone
 import logging
@@ -204,7 +204,7 @@ async def process_crm_load(clinic_id: UUID, crm_type: str, payload: dict, sync_l
             sync_log_service.mark_success(sync_log, reason="Created in opendental Successfully", operation= booking.action, appointment_id= appointment_id,  pat_id=pat_id, apt_num=apt_num)
             
 
-    except circuit_breaker_open_error as e:
+    except CircuitBreakerOpenError as e:
         db.rollback()
         logger.warning(
             "Too many failures; circuit breaker is open",

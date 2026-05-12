@@ -60,4 +60,4 @@ def verify_db_on_start():
 
 @app.get("/")
 async def root():
-    return {"status": "running", "message": "Welcome to OpenDental CRM Sync API"}
+    return {"status": "running", "message": "Welcome to PMS CRM Sync API"}

@@ -3,7 +3,7 @@ from fastapi import HTTPException, status
 from core.models import RegisteredClinics, Patients
 import httpx
 from core.utils import patient_payload, appointment_payload, appointment_payload_update, create_commlog, create_pops, retry_with_bak_off
-from core.circuti_breaker import circuit_breaker, circuit_breaker_open_error
+from core.circuti_breaker import CircuitBreaker, CircuitBreakerOpenError
 from core.schemas import patient_model, Appointments_create, Appointments_update, create_commslogs, create_pop_ups
 import  json
 from uuid import UUID
@@ -12,7 +12,12 @@ class OpenDentalAuthError(Exception):
     pass
 
 class openDentalApi:
-    cb = circuit_breaker(max_failures=5, reset_timeout=30)
+    cb = CircuitBreaker(
+        max_failures=5,
+        reset_timeout= 30,
+        half_open_max_calls= 1,
+        name= "opendental"
+    )
 
     def __init__(self, clinic_id: UUID) -> None:
         self.db = SessionLocal()
@@ -33,7 +38,7 @@ class openDentalApi:
     async def _request(self, method:str , endpoint:str, **kwargs):
         url = f"{self.base_url}{endpoint}"
         if not self.cb.allow_request():
-             raise circuit_breaker_open_error ("Circuit breaker OPEN: Too many recent failures. Try again later")
+             raise CircuitBreakerOpenError ("Circuit breaker OPEN: Too many recent failures. Try again later")
 
         async def send ():
             if method.upper() == "GET":

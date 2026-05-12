@@ -443,6 +443,10 @@ class Wallet(Base, Autoid):
     status: Mapped[WalletStatus] =mapped_column(Enum(WalletStatus, name= "wallet_status_enum"), nullable = False , default= WalletStatus.PENDING, server_default= WalletStatus.PENDING.name, index= True)
 
     external_wallet_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True, index= True)
+    
+    external_wallet_username: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    
+    external_wallet_password_encrypted: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     external_wallet_address: Mapped[Optional[str]] = mapped_column(String, nullable= True, index= True) 
 
