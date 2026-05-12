@@ -18,7 +18,7 @@ class Settings (BaseSettings):
     backend_base_url: str = Field(..., env=("backend_base_url", "BACKEND_BASE_URL"))  # type: ignore
     google_client_id: str = Field(..., env=("google_client_id", "GOOGLE_CLIENT_ID"))  # type: ignore
     toroforge_network: str = Field(..., env= ("toroforge_network", "TOROFORGE_NETWORK")) # type: ignore 
-    toroforge_base_url: str = Field(..., env= ("toroforge_base_url", "TOROFORGER_BASE_URL")) # type: ignore
+    toroforge_base_url: str = Field(..., env= ("toroforge_base_url", "TOROFORGE_BASE_URL")) # type: ignore
     toroforge_connectw_url: str = Field(..., env=("toroforge_connectw_url", "TOROFORGE_CONNECTW_URL"))# type: ignore
     toroforge_deployer_url: str = Field(..., env=("toroforge_deployer_url", "TOROFORGE_DEPLOYER_URL")) # type: ignore
     toroforge_admin: str = Field(..., env=("toroforge_admin", "TOROFORGE_ADMIN"))  # type: ignore

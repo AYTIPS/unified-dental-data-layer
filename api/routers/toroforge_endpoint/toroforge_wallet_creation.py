@@ -52,6 +52,7 @@ async def get_toroforge_wallet_service(
         )
     finally:
         await base_client.aclose()
+        
 
 
 def _raise_wallet_http_error(exc: Exception) -> NoReturn:
