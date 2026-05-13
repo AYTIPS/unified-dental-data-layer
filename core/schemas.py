@@ -371,6 +371,67 @@ class toroforge_wallet_create_response(BaseModel):
     generated_password: str
 
 
+class toroforge_kyc_submit_request(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    middle_name: Optional[str] = Field(default=None, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    bvn: str = Field(min_length=1, max_length=32)
+    currency: str = Field(min_length=1, max_length=16)
+    phone_number: str = Field(min_length=1, max_length=32)
+    dob: Datestr
+    address: str = Field(min_length=1, max_length=255)
+
+
+class toroforge_kyc_submit_response(BaseModel):
+    wallet_id: UUID
+    result: bool
+    message: Optional[str] = None
+    provider_response: Dict[str, Any]
+
+
+class toroforge_wallet_kyc_status_response(BaseModel):
+    wallet_id: UUID
+    verified: bool
+    provider: Optional[str] = None
+
+
+
+
+######## wallet reading##########
+class toroforge_wallet_read_item_out(BaseModel):
+    wallet_id: UUID
+    wallet_type: Literal["dso_treasury", "clinic"]
+    wallet_label: str 
+    clinic_id: Optional[UUID] = None
+    clinic_name: Optional[str] = None
+    dso_id: Optional[UUID] = None
+    status: str 
+    currency: str 
+    available_balance_minor: int 
+    external_wallet_username: Optional[str] = None
+    external_wallet_address: Optional[str] = None
+    auto_debit_enabled: bool 
+    last_balance_sync_at: Optional[datetime] = None 
+
+
+
+class toroforge_wallet_ledger_row_out(BaseModel):
+    ledger_entry_id: UUID
+    wallet_id: UUID
+    wallet_label: str
+    event_type: str
+    event_label: str
+    direction: Literal["debit", "credit"]
+    status: str
+    amount_minor: int
+    balance_after_minor: Optional[int] = None
+    currency: str
+    created_at: datetime
+    posted_at: Optional[datetime] = None
+    reference_type: Optional[str] = None
+    reference_id: Optional[str] = None
+
+
 
 
 

@@ -13,6 +13,8 @@ from api.routers import workspace
 from api.routers import team_members
 from api.routers.synclog import sync_log_dso
 from api.routers.synclog import sync_log_clinic
+from api.routers.toroforge_endpoint import toroforge_kyc
+from api.routers.toroforge_endpoint import toroforge_wallet_creation
 
 
 log = logging.getLogger("uvicorn.error")
@@ -46,6 +48,8 @@ app.include_router(team_members.router)
 app.include_router(sync_log_dso.router)
 app.include_router(dso_clinic_page.router)
 app.include_router(sync_log_clinic.router)
+app.include_router(toroforge_kyc.router)
+app.include_router(toroforge_wallet_creation.router)
 
 
 

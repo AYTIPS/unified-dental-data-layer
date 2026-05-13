@@ -5,7 +5,7 @@ from billing.toroforge.toroforge_client.kyc_client import ToroForgeKYCClient
 from billing.toroforge.exceptions import ToroForgeValidationError
 from core.models import Wallet
 from uuid import UUID
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,46 @@ class ToroForgeKYCService:
         )
 
         return response
+
+    async def submit_wallet_kyc(
+        self,
+        *,
+        wallet_id: UUID,
+        first_name: str,
+        middle_name: str | None,
+        last_name: str,
+        bvn: str,
+        currency: str,
+        phone_number: str,
+        dob: str,
+        address: str,
+    ) -> dict[str, Any]:
+        wallet = (
+            self.db.query(Wallet)
+            .options(
+                load_only(
+                    Wallet.id,
+                    Wallet.external_wallet_address,
+                )
+            )
+            .filter(Wallet.id == wallet_id)
+            .first()
+        )
+        if not wallet:
+            raise ToroForgeValidationError("Wallet not found")
+        if not wallet.external_wallet_address:
+            raise ToroForgeValidationError("Wallet has no external address")
+
+        return await self.submit_kyc(
+            first_name=first_name,
+            middle_name=middle_name,
+            last_name=last_name,
+            bvn=bvn,
+            currency=currency,
+            phone_number=phone_number,
+            dob=dob,
+            address=address,
+        )
     
     async def get_address_verification_status(
             self,
@@ -90,7 +130,17 @@ class ToroForgeKYCService:
     
 
     async def check_wallet_kyc_status(self, *, wallet_id: UUID) -> dict[str, Any]:
-        wallet = self.db.query(Wallet).filter(Wallet.id == wallet_id).first()
+        wallet = (
+            self.db.query(Wallet)
+            .options(
+                load_only(
+                    Wallet.id,
+                    Wallet.external_wallet_address,
+                )
+            )
+            .filter(Wallet.id == wallet_id)
+            .first()
+        )
         if not wallet:
             raise ToroForgeValidationError("Wallet not found")
         if not wallet.external_wallet_address:

@@ -95,7 +95,7 @@ def _raise_wallet_http_error(exc: Exception) -> NoReturn:
     ) from exc
 
 
-def _require_standalone_clinic_wallet_create_access(
+def  require_standalone_clinic_wallet_create_access(
     *,
     db: Session,
     user_id: UUID,
@@ -112,7 +112,7 @@ def _require_standalone_clinic_wallet_create_access(
     return clinic
 
 
-def _require_dso_clinic_wallet_create_access(
+def require_dso_clinic_wallet_create_access(
     *,
     db: Session,
     user_id: UUID,
@@ -150,7 +150,7 @@ async def create_standalone_clinic_wallet(
     db: Session = Depends(get_db),
     wallet_service: ToroForgeWalletService = Depends(get_toroforge_wallet_service),
 ):
-    clinic = _require_standalone_clinic_wallet_create_access(
+    clinic = require_standalone_clinic_wallet_create_access(
         db=db,
         user_id=current_user.id,
         clinic_id=clinic_id,
@@ -206,7 +206,7 @@ async def create_dso_clinic_wallet(
     db: Session = Depends(get_db),
     wallet_service: ToroForgeWalletService = Depends(get_toroforge_wallet_service),
 ):
-    clinic = _require_dso_clinic_wallet_create_access(
+    clinic = require_dso_clinic_wallet_create_access(
         db=db,
         user_id=current_user.id,
         dso_id=dso_id,
