@@ -208,7 +208,7 @@ class ToroForgeWalletService:
         generated_password = self.generate_wallet_password()
         encrypted_password = encrypt_secret(generated_password)
         external_address: str | None = None
-        
+
 
         try:
             logger.info(
@@ -407,10 +407,14 @@ class ToroForgeWalletService:
     ) -> bool:
         
         for attempt in range(1, attempts + 1):
-            verified = await self.keystore_client.verify_key(
-                address=address,
-                password=password
-            )
+            try:
+                verified = await self.keystore_client.verify_key(
+                    address=address,
+                    password=password
+                )
+            except ToroForgeValidationError:
+                raise
+
 
             if verified:
                 logger.info(
