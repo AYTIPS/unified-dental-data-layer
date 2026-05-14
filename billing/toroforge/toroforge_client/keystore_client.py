@@ -30,7 +30,7 @@ class ToroForgeKeyStoreClient:
 
     async def verify_key(self, *, address: str, password: str)-> bool:
         data = await self.client.call_write(
-            method="POST",
+            method="GET",
             path="/keystore",
             op="verifykey",
             params=[
