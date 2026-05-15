@@ -70,7 +70,8 @@ class ToroForgeKYCClient:
             path="/payment/toro",
             op="check_kyc",
             params=params,
-            headers=headers
+            headers=headers,
+            base_url=self.client.config.connectw_url
         )
 
         if not isinstance(data, dict):
@@ -83,6 +84,8 @@ class ToroForgeKYCClient:
             raise ToroForgeValidationError(str(error_message))
         
         return data
+
+
     
     async def check_address_verified(
             self,

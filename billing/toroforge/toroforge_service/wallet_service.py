@@ -288,14 +288,7 @@ class ToroForgeWalletService:
                 raise ToroForgeWalletCreationError(
                     "ToroForge wallet verification failed after creation"
                 )
-            logger.info(
-                "ToroForge wallet verification passed",
-                extra={
-                    **log_ctx,
-                    "wallet_id": str(wallet.id),
-                    "external_wallet_address": external_address,
-                },
-            )
+
         except ToroForgeDuplicateNameError:
             self.mark_wallet_failed(
                 wallet,

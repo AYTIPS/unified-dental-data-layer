@@ -42,7 +42,7 @@ class ToroForgeClient:
         self.base_delay_seconds = base_delay_seconds
         self.max_delay_seconds = max_delay_seconds
         self.jitter_seconds = jitter_seconds
-
+        
         self.client = httpx.AsyncClient(
             timeout= httpx.Timeout(config.timeout_seconds),
             headers={"content-Type": "application/json"}
@@ -181,10 +181,13 @@ class ToroForgeClient:
             raise ToroForgeUnavailableError(
                 f"ToroForge request error for op={op} path={path}: {exc}"
             ) from exc
+
+
         
     def build_url(self, *, path:str, base_url: str | None)-> str:
-        root = (settings.toroforge_base_url).rstrip("/")
+        root = (base_url or settings.toroforge_base_url).rstrip("/")
         return f"{root}/{path.lstrip('/')}"
+    
 
     def build_headers(self, headers: dict[str, str] | None)-> dict[str, str]:
         merged= {"content-Type": "application/json"}
