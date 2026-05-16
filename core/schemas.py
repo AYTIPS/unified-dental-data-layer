@@ -395,6 +395,14 @@ class toroforge_wallet_kyc_status_response(BaseModel):
     provider: Optional[str] = None
 
 
+###### Wwallet kyc 
+class toroforge_kyc_link_response(BaseModel):
+    wallet_id: UUID
+    external_wallet_address: str
+    kyc_url: str
+
+
+
 
 
 ######## wallet reading##########
@@ -430,6 +438,36 @@ class toroforge_wallet_ledger_row_out(BaseModel):
     posted_at: Optional[datetime] = None
     reference_type: Optional[str] = None
     reference_id: Optional[str] = None
+
+
+class toroforge_billing_subscription_out(BaseModel):
+    subscription_id: UUID
+    plan_code: str
+    status: str
+    next_billing_at: Optional[datetime] = None
+    amount_minor: int
+    currency: str
+    payment_provider: str 
+
+
+class toroforge_dso_billing_out:
+    has_wallet: bool
+    has_wallet: bool
+    next_action: Optional[Literal["create_wallet"]] = None
+    message: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    dso_id: UUID
+    treasury_wallet: Optional[toroforge_wallet_read_item_out] = None
+    clinic_wallet_count: int = 0
+    clinic_wallets: List[toroforge_wallet_read_item_out] = Field(default_factory=list)
+    wallet_inflow_this_month_minor: int = 0
+    premium_charges_this_month_minor: int = 0
+    failed_payment_count: int = 0
+    billing_health_status: Optional[Literal["good", "attention"]] = None
+    billing_health_reason: Optional[str] = None
+    recent_ledger: List[toroforge_wallet_ledger_row_out] = Field(default_factory=list)
+    active_subscription: Optional[toroforge_billing_subscription_out] = None
+
 
 
 

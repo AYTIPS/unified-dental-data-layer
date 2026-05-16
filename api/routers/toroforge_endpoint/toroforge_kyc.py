@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from fastapi.responses  import RedirectResponse
 import logging
 from collections.abc import AsyncIterator
 from typing import NoReturn
@@ -22,11 +22,7 @@ from billing.toroforge.toroforge_config import get_toroforge_config
 from billing.toroforge.toroforge_service.kyc_service import ToroForgeKYCService
 from core.database import get_db
 from core.models import Users, Wallet
-from core.schemas import (
-    toroforge_kyc_submit_request,
-    toroforge_kyc_submit_response,
-    toroforge_wallet_kyc_status_response,
-)
+from core.schemas import toroforge_wallet_kyc_status_response
 from infra.rbac import require_clinic_access, require_clinic_manage, require_dso_access, require_dso_manage
 
 logger = logging.getLogger(__name__)
@@ -158,14 +154,14 @@ def require_wallet_view_access(
     )
 
 
+
+
 @router.post(
     "/wallets/{wallet_id}/kyc",
-    status_code=status.HTTP_200_OK,
-    response_model=toroforge_kyc_submit_response,
+    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
 )
-async def submit_wallet_kyc(
+async def start_wallet_kyc(
     wallet_id: UUID,
-    payload: toroforge_kyc_submit_request,
     request: Request,
     current_user: Users = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -182,32 +178,18 @@ async def submit_wallet_kyc(
         "dso_id": str(wallet.dso_id) if wallet.dso_id else None,
     }
 
-    logger.info("ToroForge wallet KYC submission requested", extra=log_ctx)
+    logger.info("ToroForge wallet KYC redirect requested", extra=log_ctx)
 
     try:
-        response = await kyc_service.submit_wallet_kyc(
-            wallet_id=wallet_id,
-            first_name=payload.first_name,
-            middle_name=payload.middle_name,
-            last_name=payload.last_name,
-            bvn=payload.bvn,
-            currency=payload.currency,
-            phone_number=payload.phone_number,
-            dob=payload.dob,
-            address=payload.address,
-        )
+        kyc_url = await kyc_service.get_wallet_kyc_link(wallet_id=wallet_id)
     except Exception as exc:
-        logger.exception("ToroForge wallet KYC submission failed", extra=log_ctx)
+        logger.exception("ToroForge wallet KYC redirect failed", extra=log_ctx)
         raise_kyc_http_error(exc)
 
-    logger.info("ToroForge wallet KYC submission completed", extra=log_ctx)
+    logger.info("ToroForge wallet KYC redirect generated", extra=log_ctx)
 
-    return {
-        "wallet_id": wallet_id,
-        "result": bool(response.get("result", True)),
-        "message": response.get("message"),
-        "provider_response": response,
-    }
+    return RedirectResponse(url=kyc_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
 
 
 @router.get(
