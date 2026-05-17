@@ -226,8 +226,8 @@ async def create_dso_clinic_wallet(
     logger.info("ToroForge DSO clinic wallet create requested", extra=log_ctx)
 
     try:
-        result = await wallet_service.create_and_provision_clinic_wallet(
-            clinic_id=clinic.id,
+        result = await wallet_service.create_and_provision_dso_wallet(
+            dso_id=dso_id,
             username=payload.username,
         )
     except Exception as exc:

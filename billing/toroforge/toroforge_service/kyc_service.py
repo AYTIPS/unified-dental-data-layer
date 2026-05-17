@@ -67,12 +67,13 @@ class ToroForgeKYCService:
             address=wallet.external_wallet_address
         )
     
+    
 
     async def get_wallet_kyc_link(
             self, 
             *,
             wallet_id: UUID
-    )  -> str:
+    ) -> str:
         
         wallet = self.db.query(Wallet).filter(Wallet.id == wallet_id).first()
 
@@ -88,11 +89,8 @@ class ToroForgeKYCService:
             f"/KYC/project-verify?address={quote(address)}"
         )
 
-        return (kyc_url)
+        return kyc_url
         
-
-
-
 
     def _mask_address(self, address: str) -> str:
         normalized = address.strip()
