@@ -512,6 +512,15 @@ def build_dso_billing_command_center_cached(
         generated_at=datetime.now(timezone.utc),
         dso_id=dso_id,
         treasury_wallet=to_wallet_item(wallet=treasury_wallet),
+        available_balance_minor=treasury_wallet.cached_balance_minor,
+        available_balance=money_amount_string(
+            amount_minor=treasury_wallet.cached_balance_minor,
+            currency=treasury_wallet.currency,
+        ),
+        available_balance_display=money_display_string(
+            amount_minor=treasury_wallet.cached_balance_minor,
+            currency=treasury_wallet.currency,
+        ),
         clinic_wallet_count=len(clinic_wallets),
         clinic_wallets=clinic_wallets,
         wallet_inflow_this_month_minor=wallet_inflow_this_month_minor,
@@ -657,6 +666,15 @@ def build_clinic_billing_command_center_cached(
         dso_id=clinic.dso_id,
         clinic_wallet=to_wallet_item(wallet=clinic_wallet, clinic_name=clinic.clinic_name),
         parent_wallet_label="DSO Wallet" if clinic.dso_id else None,
+        available_balance_minor=clinic_wallet.cached_balance_minor,
+        available_balance=money_amount_string(
+            amount_minor=clinic_wallet.cached_balance_minor,
+            currency=clinic_wallet.currency,
+        ),
+        available_balance_display=money_display_string(
+            amount_minor=clinic_wallet.cached_balance_minor,
+            currency=clinic_wallet.currency,
+        ),
         wallet_inflow_this_month_minor=wallet_inflow_this_month_minor,
         wallet_inflow_this_month=money_amount_string(
             amount_minor=wallet_inflow_this_month_minor,

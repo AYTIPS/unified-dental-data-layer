@@ -470,6 +470,9 @@ class toroforge_dso_billing_out(BaseModel):
     generated_at: Optional[datetime] = None
     dso_id: UUID
     treasury_wallet: Optional[toroforge_wallet_read_item_out] = None
+    available_balance_minor: int = 0
+    available_balance: Optional[str] = None
+    available_balance_display: Optional[str] = None
     clinic_wallet_count: int = 0
     clinic_wallets: List[toroforge_wallet_read_item_out] = Field(default_factory=list)
     wallet_inflow_this_month_minor: int = 0
@@ -494,6 +497,9 @@ class toroforge_clinic_billing_out(BaseModel):
     dso_id: Optional[UUID] = None
     clinic_wallet: Optional[toroforge_wallet_read_item_out] = None
     parent_wallet_label: Optional[str] = None
+    available_balance_minor: int = 0
+    available_balance: Optional[str] = None
+    available_balance_display: Optional[str] = None
     wallet_inflow_this_month_minor: int = 0
     wallet_inflow_this_month: Optional[str] = None
     wallet_inflow_this_month_display: Optional[str] = None
