@@ -5,6 +5,7 @@ from billing.toroforge.toroforge_client.kyc_client import ToroForgeKYCClient
 from billing.toroforge.exceptions import ToroForgeValidationError
 from core.models import Wallet
 from uuid import UUID
+from auth.security import decode_secret
 from urllib.parse import quote
 from sqlalchemy.orm import Session, load_only
 
@@ -86,24 +87,30 @@ class ToroForgeKYCService:
             self, 
             *,
             wallet_id: UUID
-    ) -> str:
+    ) -> tuple[str, str]:
         
         wallet = self.db.query(Wallet).filter(Wallet.id == wallet_id).first()
 
         if not wallet:
             raise ToroForgeValidationError("Wallet not found")
+
+        password = decode_secret(wallet.external_wallet_password_encrypted)
         
         if not wallet.external_wallet_address:
             raise ToroForgeValidationError("Wallet has no external address")
         
+        if not password:
+            raise ToroForgeValidationError("Wallet has no external password")
+        
         address = wallet.external_wallet_address.strip()
+
         kyc_url = (
             f"{self.kyc_client.client.config.connectw_url.rstrip('/')}"
             f"/KYC/project-verify?address={quote(address)}"
         )
         
 
-        return kyc_url
+        return (kyc_url, password)
         
 
     def _mask_address(self, address: str) -> str:

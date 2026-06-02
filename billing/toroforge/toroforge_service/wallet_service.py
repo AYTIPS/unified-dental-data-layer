@@ -505,7 +505,6 @@ class ToroForgeWalletService:
              wallet_id=wallet.id,
              external_wallet_address= external_wallet_address, # type: ignore
              external_wallet_username= external_wallet_username, # type: ignore
-            generated_password= generated_password,
         )
 
 
