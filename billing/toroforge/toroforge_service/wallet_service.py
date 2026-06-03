@@ -717,7 +717,8 @@ class ToroForgeWalletService:
             logger.warning("ToroForge username validation failed: empty username")
             raise ToroForgeWalletCreationError("Wallet username is required")
         return normalized
-    
+
+
     
     def generate_wallet_password(
             self,
@@ -726,6 +727,95 @@ class ToroForgeWalletService:
     ) -> str:
         alphabet = string.ascii_letters + string.digits
         return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+    
+    async def update_wallet_password(
+        self,
+        *,
+       wallet_id: UUID,
+    ) -> dict:
+
+        wallet = self.db.query( Wallet).filter(Wallet.id == wallet_id ).first()
+        if not wallet:
+            raise ToroForgeValidationError("Wallet does not exist")
+        
+        address = wallet.external_wallet_address
+        oldpassword = decode_secret(wallet.external_wallet_password_encrypted)
+        newpassword = self.generate_wallet_password()
+
+        if not address:
+            raise ToroForgeValidationError("Address not available for this wallet")
+        
+        if not wallet.external_wallet_password_encrypted:
+            raise ToroForgeValidationError("Wallet does not have an issued password")
+        
+        logger.info(
+                "ToroForge wallet password update requested",
+                extra={
+                    "wallet_id": str(wallet.id),
+                    "external_wallet_address": address,
+                },
+            )
+        try:
+            data = await self.keystore_client.update_key_password(address= address, old_password= oldpassword, new_password= newpassword)
+            if data.get("result") is True:
+                encoded_password = encrypt_secret(newpassword)
+                wallet.external_wallet_password_encrypted = encoded_password
+                try:
+                    self.db.add(wallet)
+                    self.db.commit()
+                    self.db.refresh(wallet)
+
+                    return data
+
+                except SQLAlchemyError:
+                    self.db.rollback()
+                    raise ToroForgeValidationError("Database error while commiting wallet for updating password")
+            
+            else:
+                raise ToroForgeValidationError("Keystore client failed to update key password")
+        
+        except Exception as exc:
+            logger.error(f"Failed to update wallet password: {str(exc)}", exc_info=True)
+            raise ToroForgeValidationError(f"An unexpected error occurred: {str(exc)}")
+        
+
+                
+        
+
+
+
+
+                
+                    
+
+
+
+        
+
+
+
+
+        
+            
+
+        
+
+        
+
+
+        
+
+
+
+
+
+
+
+
+
+
 
     
 

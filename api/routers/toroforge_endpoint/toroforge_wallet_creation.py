@@ -5,9 +5,9 @@ from collections.abc import AsyncIterator
 from typing import NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Header, Cookie
 from sqlalchemy.orm import Session
-
+from auth.csrf_helper import verify_csrf
 from auth.oauth2 import get_current_user
 from billing.toroforge.exceptions import (
     ToroForgeDuplicateNameError,
@@ -24,6 +24,10 @@ from core.models import RegisteredClinics, Users
 from core.schemas import (
     toroforge_wallet_create_request,
     toroforge_wallet_create_response,
+)
+from api.routers.toroforge_endpoint.toroforge_kyc import (
+    get_wallet_for_access_check,
+    require_wallet_manage_access,
 )
 from infra.rbac import require_clinic_manage, require_dso_manage
 
@@ -308,3 +312,51 @@ async def create_dso_treasury_wallet(
         "external_wallet_username": result.external_wallet_username,
         "generated_password": result.generated_password,
     }
+
+
+
+
+@router.post("/wallets/{wallet_id}/password/rotate", status_code=status.HTTP_200_OK)
+async def update_password_for_wallet(
+    wallet_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(get_current_user),
+    csrf_cookie: str | None = Cookie(default=None, alias="csrf_token"),
+    csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
+    wallet_service: ToroForgeWalletService = Depends(get_toroforge_wallet_service)
+):
+    verify_csrf(csrf_cookie, csrf_header, request)
+    wallet = get_wallet_for_access_check(db=db, wallet_id=wallet_id)
+    require_wallet_manage_access(
+        db=db,
+        user_id=current_user.id,
+        wallet=wallet,
+    )
+    log_ctx = {
+        "request_id": getattr(request.state, "request_id", None),
+        "user_id": str(current_user.id),
+        "wallet_id": str(wallet_id),
+        "clinic_id": str(wallet.clinic_id) if wallet.clinic_id else None,
+        "dso_id": str(wallet.dso_id) if wallet.dso_id else None,
+    }
+
+    logger.info("ToroForge wallet password rotation requested", extra=log_ctx)
+
+    try:
+        result = await wallet_service.update_wallet_password(wallet_id=wallet_id)
+    except Exception as exc:
+        logger.exception("ToroForge wallet failed to update", extra={
+            "wallet_id": wallet_id
+        })
+        _raise_wallet_http_error(exc)
+    
+    return {
+        "wallet_id": wallet_id,
+        "rotated": True,
+        "provider_result": result.get("result") 
+    }
+    
+ 
+  
+    

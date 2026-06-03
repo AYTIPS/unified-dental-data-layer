@@ -66,3 +66,43 @@ class ToroForgeKeyStoreClient:
         raise ToroForgeValidationError(
             f"ToroForge verifykey returned unrecognized result: {data}"
         )
+
+
+
+
+    async def update_key_password(
+        self,
+        *,
+        address: str,
+        old_password :str | None,
+        new_password: str
+    )-> dict:
+
+        normalized_address = address.strip()
+
+        if not normalized_address:
+            raise ToroForgeValidationError("address is required")
+
+        if not old_password:
+            raise ToroForgeValidationError("old_password is required")
+
+        if not new_password:
+            raise ToroForgeValidationError("new_password is required")
+        
+        data = await self.client.call_write(
+            method="POST",
+            path="/keystore",
+            op="updatekeypwd",
+            params= [
+                { "name": "addr", "value": normalized_address },
+                { "name": "oldpwd", "value": old_password },
+                { "name": "newpwd", "value": new_password },
+            ],
+        )
+        if data.get("result") is not True:
+            error = data.get("error") or "Failed to update ToroForge key password"
+            raise ToroForgeValidationError(str(error))
+        return data
+
+
+
