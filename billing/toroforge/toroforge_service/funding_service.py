@@ -1,7 +1,6 @@
 from __future__ import annotations
 import logging 
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 from uuid import UUID
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -18,6 +17,13 @@ from core.models import (
     Wallet,
     WalletLedgerEntry,
     WalletStatus
+)
+from billing.toroforge.money import (
+    coerce_amount_decimal,
+    to_amount_minor,
+    to_provider_amount_string,
+    balance_amount_to_minor,
+    extract_address_balance_minor
 )
 
 logger = logging.getLogger(__name__)
@@ -63,18 +69,18 @@ class ToroForgeFundingService:
         normalized_currency = currency.strip().upper()
         normalized_token = (token or normalized_currency).strip().upper()
         normalized_payment_type = payment_type.strip().lower()
-        amount_decimal = self._coerce_amount_decimal(amount)
-        amount_minor = self.to_amount_minor(
+        amount_decimal = coerce_amount_decimal(amount)
+        amount_minor = to_amount_minor(
             amount=amount_decimal,
             currency=normalized_currency,
         )
-        provider_amount = self._to_provider_amount_string(
+        provider_amount = to_provider_amount_string(
             amount=amount_decimal,
             currency=normalized_currency,
         )
 
 
-        if normalized_payment_type not in {"card", "bank", "wire"}:
+        if normalized_payment_type not in {"card", "bank"}:
             raise ToroForgeValidationError("Unsupported payment type")
         
         wallet = self.db.query(Wallet).filter(Wallet.id == wallet_id).first()
@@ -228,6 +234,8 @@ class ToroForgeFundingService:
                 description=description
             )
 
+
+
         except Exception as exc:
             payment.status = PaymentTransactionStatus.FAILED
             payment.failure_reason = str(exc)
@@ -245,6 +253,7 @@ class ToroForgeFundingService:
                 "stage": "provider_initialize_failed",
                 "failure_reason": str(exc)
             }
+          
 
             self.commit_and_refresh(
                 payment,
@@ -258,10 +267,9 @@ class ToroForgeFundingService:
                 extra={**log_ctx, "payment_transaction_id": str(payment.id)},
             )
             raise
-    
-        external_payment_id = self.extract_txid(provider_response)
-        
 
+        external_payment_id = self.extract_txid(provider_response)
+        ####on success 
         payment.external_payment_id = external_payment_id
         payment.failure_reason = None
         payment.details = {
@@ -308,6 +316,180 @@ class ToroForgeFundingService:
             "provider_response": provider_response,
             "amount_minor": amount_minor
         }
+
+
+    async def verify_wallet_deposit(
+            self,
+            *,
+            wallet_id: UUID,
+            payment_transaction_id: UUID,
+            txid: str
+    ) -> dict[str, Any]:
+        
+        normalized_txid =  txid.strip()
+
+        if not normalized_txid:
+            raise ToroForgeValidationError("txid is required")
+        
+        payment = (
+            self.db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.id == payment_transaction_id,
+                PaymentTransaction.wallet_id == wallet_id,
+            )
+            .first()
+        )
+
+        if not payment:
+         raise ToroForgeValidationError("Payment transaction not found")
+        
+        wallet = self.db.query(Wallet).filter(Wallet.id == wallet_id).first()
+
+        if not wallet:
+            raise ToroForgeValidationError("Wallet not found")
+        
+        if wallet.status != WalletStatus.ACTIVE:
+            raise ToroForgeValidationError("Wallet must be active before verifying deposit")
+
+        external_wallet_address = wallet.external_wallet_address
+        if not external_wallet_address:
+            raise ToroForgeValidationError("Wallet has no external ToroForge address")
+        
+        provider_response = await self.payment_client.get_payment_by_txid(
+        admin=self.payment_client.client.config.admin,
+        adminpwd=self.payment_client.client.config.adminpwd,
+        txid=normalized_txid
+        )
+
+        if provider_response.get("result") is not True:
+            message = str(provider_response.get("message") or "").strip()
+            raise ToroForgeValidationError(message or "ToroForge transaction query failed")
+        
+        records = provider_response.get("data") or []
+
+        if not records:
+            raise ToroForgeValidationError("Deposit transaction was not found on ToroForge")
+
+        matched_record = self.find_matching_fiat_transaction(
+            records=records,
+            payment=payment,
+            wallet=wallet,
+            txid=normalized_txid,
+        )
+
+        if not matched_record:
+            raise ToroForgeValidationError(
+                "Deposit transaction does not match this funding request"
+            )
+        
+        if payment.status != PaymentTransactionStatus.SUCCEEDED:
+            if wallet.currency.strip().upper() != payment.currency.strip().upper():   
+                raise ToroForgeValidationError(
+                "Wallet currency does not match payment currency"
+                )
+            balance_response = await self.payment_client.get_address_balance(
+                address=external_wallet_address,
+            )
+
+            remote_balance_minor = extract_address_balance_minor(
+                balance_response=balance_response,
+                currency=payment.currency,
+            ) 
+
+            expected_balance_minor = wallet.cached_balance_minor + payment.amount_minor
+
+            if remote_balance_minor < expected_balance_minor:
+                raise ToroForgeValidationError(
+                    "ToroForge wallet balance does not show this deposit yet"
+                )
+
+
+        posted = self.record_verified_funding_success(
+                payment_transaction_id=payment_transaction_id,
+                provider_response={
+                    **provider_response,
+                    "matched_record": matched_record,
+                },
+            )
+
+        return {
+            **posted,
+            "status": PaymentTransactionStatus.SUCCEEDED.value,
+            "currency": payment.currency,
+            "txid": normalized_txid,
+            "provider_response": provider_response,
+        }
+    
+
+
+    def find_matching_fiat_transaction(
+        self,
+        *,
+        records: list[dict[str, Any]],
+        payment: PaymentTransaction,
+        wallet: Wallet,
+        txid: str,
+    ) -> dict[str, Any] | None:
+        
+        expected_currency = payment.currency.strip().upper()
+        expected_amount_minor = payment.amount_minor
+        expected_address = (wallet.external_wallet_address or "").strip().lower()
+        expected_txid = (payment.external_payment_id or txid).strip()
+
+        for record in records:
+            record_txid = str(
+                record.get("TX_ID")
+            ).strip()
+
+            if record_txid and record_txid != expected_txid:
+                continue
+
+            record_currency = str(
+                record.get("TX_Currency")
+            ).strip().upper()
+
+            if record_currency and record_currency != expected_currency:
+                continue
+
+            record_address = str(
+                record.get("TX_Address")
+            ).strip().lower()
+
+            if record_address and expected_address and record_address != expected_address:
+                continue
+
+            record_amount_minor = self.extract_record_amount_minor(
+                record=record,
+                currency=expected_currency,
+            )
+
+            if record_amount_minor is not None and record_amount_minor != expected_amount_minor:
+                continue
+
+            return record
+
+        return None
+    
+
+
+    def extract_record_amount_minor(
+        self,
+        *,
+        record: dict[str, Any],
+        currency: str,
+    ) -> int | None:
+        raw_amount = (
+            record.get("TX_Amount")
+        )
+
+        if raw_amount is None:
+            return None
+
+        return to_amount_minor(
+            amount=coerce_amount_decimal(raw_amount),
+            currency=currency,
+        )
+
 
 
     def record_verified_funding_success(
@@ -571,67 +753,31 @@ class ToroForgeFundingService:
         return f"funding:{request_id}"
     
 
-    def _currency_decimals(self, currency: str) -> int:
-        decimals_map = {
-            "USD": 2,
-            "EUR": 2,
-            "GBP": 2,
-            "NGN": 2,
-        }
-
-        decimals = decimals_map.get(currency)
-        if decimals is None:
-            raise ToroForgeValidationError(f"Unsupported currency: {currency}")
-
-        return decimals
-    
-
-    def _normalize_amount(self, *, amount: Decimal, currency: str) -> Decimal:
-        decimals = self._currency_decimals(currency)
-        quantizer = Decimal("1").scaleb(-decimals)
-        return amount.quantize(quantizer, rounding=ROUND_HALF_UP)
-    
-
-    def to_amount_minor(self, *, amount, currency: str) -> int:
-        decimals = self._currency_decimals(currency)
-        normalized_amount = self._normalize_amount(amount=amount, currency=currency)
-        multiplier = Decimal(10) ** decimals
-        amount_minor = int(normalized_amount * multiplier)
-
-        if amount_minor <= 0:
-            raise ToroForgeValidationError("Funding amount must be greater than zero")
-
-        return amount_minor
-
-
-    def _coerce_amount_decimal(self, amount: str | Decimal | int | float) -> Decimal:
-        try:
-            decimal_amount = amount if isinstance(amount, Decimal) else Decimal(str(amount).strip())
-        except (InvalidOperation, AttributeError, ValueError) as exc:
-            raise ToroForgeValidationError("Invalid funding amount") from exc
-
-        if decimal_amount <= 0:
-            raise ToroForgeValidationError("Funding amount must be greater than zero")
-
-        return decimal_amount
-
-
-    def _to_provider_amount_string(self, *, amount: Decimal, currency: str) -> str:
-        decimals = self._currency_decimals(currency)
-        normalized_amount = self._normalize_amount(amount=amount, currency=currency)
-        return f"{normalized_amount:.{decimals}f}"
-
 
     def extract_txid(self, payload: dict[str, Any]) -> str | None:
         txid = payload.get("TX_ID")
         if isinstance(txid, str) and txid.strip():
             return txid.strip()
 
+        matched_record = payload.get("matched_record")
+        if isinstance(matched_record, dict):
+            matched_txid = matched_record.get("TX_ID")
+            if isinstance(matched_txid, str) and matched_txid.strip():
+                return matched_txid.strip()
+
         nested = payload.get("data")
         if isinstance(nested, dict):
             nested_txid = nested.get("TX_ID")
             if isinstance(nested_txid, str) and nested_txid.strip():
                 return nested_txid.strip()
+
+        if isinstance(nested, list):
+            for record in nested:
+                if not isinstance(record, dict):
+                    continue
+                nested_txid = record.get("TX_ID")
+                if isinstance(nested_txid, str) and nested_txid.strip():
+                    return nested_txid.strip()
 
         return None
     

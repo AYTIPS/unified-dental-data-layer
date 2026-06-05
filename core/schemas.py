@@ -371,6 +371,47 @@ class toroforge_wallet_create_response(BaseModel):
     generated_password: Optional[str] = None
 
 
+class toroforge_wallet_funding_initialize_request(BaseModel):
+    amount: str = Field(min_length=1, max_length=32)
+    currency: str = Field(min_length=1, max_length=16)
+    payment_type: Literal["card", "bank"]
+    success_url: str = Field(min_length=1, max_length=2048)
+    cancel_url: str = Field(min_length=1, max_length=2048)
+    token: Optional[str] = Field(default=None, max_length=16)
+    payer_name: Optional[str] = Field(default=None, max_length=255)
+    payer_address: Optional[str] = Field(default=None, max_length=255)
+    payer_city: Optional[str] = Field(default=None, max_length=100)
+    payer_state: Optional[str] = Field(default=None, max_length=100)
+    payer_country: Optional[str] = Field(default=None, max_length=100)
+    payer_zipcode: Optional[str] = Field(default=None, max_length=32)
+    payer_phone: Optional[str] = Field(default=None, max_length=32)
+    description: Optional[str] = Field(default=None, max_length=500)
+
+
+class toroforge_wallet_funding_initialize_response(BaseModel):
+    payment_transaction_id: UUID
+    ledger_entry_id: Optional[UUID] = None
+    status: str
+    external_payment_id: Optional[str] = None
+    provider_response: Dict[str, Any]
+    amount_minor: Optional[int] = None
+
+
+class toroforge_wallet_deposit_verify_request(BaseModel):
+    txid: str = Field(min_length=1, max_length=128)
+
+
+class toroforge_wallet_deposit_verify_response(BaseModel):
+    payment_transaction_id: UUID
+    ledger_entry_id: UUID
+    wallet_id: UUID
+    status: str
+    currency: str
+    txid: str
+    new_cached_balance_minor: int
+    provider_response: Dict[str, Any]
+
+
 class toroforge_kyc_submit_request(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     middle_name: Optional[str] = Field(default=None, max_length=100)

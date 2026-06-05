@@ -124,3 +124,29 @@ class ToroForgePaymentClient:
             )
 
         return data
+    
+
+    async def get_address_balance(
+    self,
+    *,
+    address: str,
+    ) -> dict[str, Any]:
+        normalized_address = address.strip()
+
+        if not normalized_address:
+            raise ToroForgeValidationError("address is required")
+
+        response = await self.client.call_read(
+            path="query",
+            op="getaddrbalance",
+            params=[
+                {"name": "addr", "value": normalized_address},
+            ],
+            method="GET",
+        )
+
+        if response.get("result") is not True:
+            message = str(response.get("message") or "").strip()
+            raise ToroForgeValidationError(message or "ToroForge address balance query failed")
+
+        return response
