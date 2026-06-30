@@ -71,16 +71,26 @@ class ToroForgePaymentClient:
 
         data = await self.client.call_write(
             method="POST",
-            path="/api/payment/toro",
+            path="/api/payment/toro/",
             op="paymentinitialize",
             params=params,
             headers=headers,
-            base_url=self.client.config.deployer_url,
         )
 
         if not isinstance(data, dict):
             raise ToroForgeValidationError(
                 f"ToroForge paymentinitialize returned unexpected response: {data}"
+            )
+
+        if data.get("result") is not True:
+            message = str(
+                data.get("message")
+                or data.get("error")
+                or ""
+            ).strip()
+
+            raise ToroForgeValidationError(
+                message or f"ToroForge paymentinitialize failed: {data}"
             )
 
         return data
@@ -107,11 +117,10 @@ class ToroForgePaymentClient:
 
         data = await self.client.call_read(
             method="POST",
-            path="/api/payment/toro",
+            path="/api/payment/toro/",
             op="getfiattransactions_txid",
             params=params,
             headers=headers,
-            base_url=self.client.config.deployer_url,
         )
 
         if not isinstance(data, dict):
