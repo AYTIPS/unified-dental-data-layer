@@ -71,7 +71,7 @@ class ToroForgePaymentClient:
 
         data = await self.client.call_write(
             method="POST",
-            path="/api/payment",
+            path="/api/payment/toro/",
             op="paymentinitialize",
             params=params,
             headers=headers,
@@ -118,7 +118,7 @@ class ToroForgePaymentClient:
 
         data = await self.client.call_read(
             method="POST",
-            path="/api/payment",
+            path="/api/payment/toro/",
             op="getfiattransactions_txid",
             params=params,
             headers=headers,

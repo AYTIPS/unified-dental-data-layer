@@ -20,7 +20,7 @@ class Settings (BaseSettings):
     toroforge_network: str = Field(..., env= ("toroforge_network", "TOROFORGE_NETWORK")) # type: ignore 
     toroforge_base_url: str = Field(..., env= ("toroforge_base_url", "TOROFORGE_BASE_URL")) # type: ignore
     toroforge_connectw_url: str = Field(..., env=("toroforge_connectw_url", "TOROFORGE_CONNECTW_URL"))# type: ignore
-    toroforge_payment_url: str = Field(default="https://restapi.connectw.com", env=("toroforge_payment_url", "TOROFORGE_PAYMENT_URL"))  # type: ignore
+    toroforge_payment_url: str = Field(default="https://www.toronet.org", env=("toroforge_payment_url", "TOROFORGE_PAYMENT_URL"))  # type: ignore
     toroforge_deployer_url: str = Field(..., env=("toroforge_deployer_url", "TOROFORGE_DEPLOYER_URL")) # type: ignore
     toroforge_admin: str = Field(..., env=("toroforge_admin", "TOROFORGE_ADMIN"))  # type: ignore
     toroforge_adminpwd: str = Field(..., env=("toroforge_adminpwd", "TOROFORGE_ADMINPWD"))  # type: ignore
