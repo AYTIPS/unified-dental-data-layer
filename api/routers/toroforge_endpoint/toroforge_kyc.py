@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from typing import NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session, load_only
 
 from auth.oauth2 import get_current_user
@@ -200,6 +200,7 @@ async def start_wallet_kyc(
 async def get_wallet_kyc_status(
     wallet_id: UUID,
     request: Request,
+    refresh: bool = Query(default=False),
     current_user: Users = Depends(get_current_user),
     db: Session = Depends(get_db),
     kyc_service: ToroForgeKYCService = Depends(get_toroforge_kyc_service),
@@ -215,19 +216,31 @@ async def get_wallet_kyc_status(
         "dso_id": str(wallet.dso_id) if wallet.dso_id else None,
     }
 
-    logger.info("ToroForge wallet KYC status requested", extra=log_ctx)
+    logger.info(
+        "ToroForge wallet KYC status requested",
+        extra={**log_ctx, "refresh": refresh},
+    )
 
     try:
-        status_response, kyc_verified = await kyc_service.check_wallet_kyc_status(wallet_id=wallet_id)
+        provider = None
+        if refresh:
+            status_response, kyc_verified = await kyc_service.check_wallet_kyc_status(
+                wallet_id=wallet_id
+            )
+            provider = status_response.get("provider")
+        else:
+            kyc_verified = kyc_service.get_cached_wallet_kyc_status(wallet_id=wallet_id)
     except Exception as exc:
         logger.exception("ToroForge wallet KYC status failed", extra=log_ctx)
         raise_kyc_http_error(exc)
 
-    logger.info("ToroForge wallet KYC status completed", extra=log_ctx)
+    logger.info(
+        "ToroForge wallet KYC status completed",
+        extra={**log_ctx, "refresh": refresh, "verified": kyc_verified},
+    )
 
     return {
         "wallet_id": wallet_id,
         "verified": kyc_verified,
-        "provider": status_response.get("provider"),
-        
+        "provider": provider,
     }

@@ -79,6 +79,24 @@ class ToroForgeKYCService:
             raise
 
         return status, bool(wallet.kyc_verified)
+
+    def get_cached_wallet_kyc_status(self, *, wallet_id: UUID) -> bool:
+        wallet = (
+            self.db.query(Wallet)
+            .options(
+                load_only(
+                    Wallet.id,
+                    Wallet.kyc_verified,
+                )
+            )
+            .filter(Wallet.id == wallet_id)
+            .first()
+        )
+
+        if not wallet:
+            raise ToroForgeValidationError("Wallet not found")
+
+        return bool(wallet.kyc_verified)
     
     
 
