@@ -75,7 +75,7 @@ class ToroForgePaymentClient:
             op="paymentinitialize",
             params=params,
             headers=headers,
-            base_url=self.client.config.connectw_url,
+            base_url=self.client.config.payment_url,
         )
 
         if not isinstance(data, dict):
@@ -122,7 +122,7 @@ class ToroForgePaymentClient:
             op="getfiattransactions_txid",
             params=params,
             headers=headers,
-            base_url=self.client.config.connectw_url,
+            base_url=self.client.config.payment_url,
         )
 
         if not isinstance(data, dict):
