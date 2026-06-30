@@ -42,7 +42,6 @@ class ToroForgePaymentClient:
 
         params = [
             {"name": "currency", "value": currency},
-            {"name": "token", "value": token},
             {"name": "address", "value": address},
             {"name": "amount", "value": amount},
             {"name": "success_url", "value": success_url},
